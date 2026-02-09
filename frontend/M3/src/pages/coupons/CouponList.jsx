@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./coupon.css";
-
-const API_BASE_URL = " http://localhost:7001/api";
+import { API_BASE_URL } from '../../config/api';
 
 const CouponList = () => {
   const [coupons, setCoupons] = useState([]);

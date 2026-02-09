@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import "./brand.css";
-
-const API_BASE_URL = " http://localhost:7001/api";
+import { API_BASE_URL } from '../../config/api';
 
 const emptyBrand = {
   logo: "",

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import "./cloudinary.css";
-
-const API_BASE_URL = " http://localhost:7001/api";
+import { API_BASE_URL } from '../../config/api';
 
 const CloudinaryPage = () => {
   const [singleFile, setSingleFile] = useState(null);

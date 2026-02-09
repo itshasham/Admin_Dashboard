@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import "./user.css";
-
-const API_BASE_URL = " http://localhost:7001/api";
+import { API_BASE_URL } from '../../config/api';
 
 const UserList = () => {
   const [users, setUsers] = useState([]);

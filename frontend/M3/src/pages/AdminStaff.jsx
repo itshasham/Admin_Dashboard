@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './AdminStaff.css';
+import { API_BASE_URL } from '../config/api';
 
 const AdminStaff = () => {
   const [staff, setStaff] = useState([]);
@@ -65,7 +66,7 @@ const AdminStaff = () => {
   const fetchStaff = async () => {
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await fetch(' http://localhost:7001/api/admin/all', {
+      const response = await fetch(`${API_BASE_URL}/admin/all`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -115,8 +116,8 @@ const AdminStaff = () => {
     try {
       const token = localStorage.getItem('adminToken');
       const url = editingStaff 
-        ? ` http://localhost:7001/api/admin/update-stuff/${editingStaff._id}`
-        : ' http://localhost:7001/api/admin/add';
+        ? `${API_BASE_URL}/admin/update-stuff/${editingStaff._id}`
+        : `${API_BASE_URL}/admin/add`;
       
       const method = editingStaff ? 'PATCH' : 'POST';
       const bodyData = editingStaff 
@@ -174,7 +175,7 @@ const AdminStaff = () => {
 
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await fetch(` http://localhost:7001/api/admin/${staffId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/${staffId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

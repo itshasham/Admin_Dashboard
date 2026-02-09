@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './AdminDashboard.css';
-
-const API_BASE_URL = ' http://localhost:7001/api';
+import { API_BASE_URL } from '../config/api';
 
 const AdminDashboard = () => {
   const [adminData, setAdminData] = useState(null);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import './AdminForgotPassword.css';
+import { API_BASE_URL } from '../config/api';
 
 const AdminForgotPassword = () => {
   const [email, setEmail] = useState('');
@@ -28,7 +29,7 @@ const AdminForgotPassword = () => {
     }
 
     try {
-      const response = await fetch(' http://localhost:7001/api/admin/forget-password', {
+      const response = await fetch(`${API_BASE_URL}/admin/forget-password`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
