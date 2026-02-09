@@ -1,0 +1,22 @@
+@import "../brands/brand.css";
+
+.fancy { border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
+.muted { color:#64748b; font-size: 13px; margin-top: 4px; }
+
+.animated-table tbody .fade-in-row { animation: fadeInUp .35s ease both; }
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Enhanced form bits */
+.chip-input { display:flex; gap:8px; align-items:center; }
+.chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.chip { display:inline-flex; align-items:center; gap:6px; background:#eef2ff; color:#1e3a8a; border:1px solid #c7d2fe; padding:6px 10px; border-radius:999px; font-size:12px; }
+.chip-remove { background:transparent; border:none; color:#1e3a8a; cursor:pointer; font-size:14px; line-height:1; }
+.chip.fade-in { animation: fadeInUp .25s ease both; }
+
+.preview-row { display:flex; align-items:center; gap:12px; margin-top:8px; }
+.preview { width:180px; height:120px; border:1px solid #e2e8f0; border-radius:10px; display:flex; align-items:center; justify-content:center; background:#f8fafc; overflow:hidden; box-shadow:0 4px 12px rgba(2,6,23,0.06); }
+.preview img { width:100%; height:100%; object-fit:cover; }
+.preview-placeholder { color:#94a3b8; font-size:12px; }

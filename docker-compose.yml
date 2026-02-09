@@ -1,0 +1,10 @@
+services:
+  frontend:
+    build:
+      context: ./frontend/M3
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/M3:/app
+      - /app/node_modules
+    command: sh -c "if [ ! -d node_modules ]; then npm ci; fi; npm run dev -- --host 0.0.0.0 --port 5173"
