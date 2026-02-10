@@ -1303,7 +1303,7 @@ paths:
               properties:
                 status:
                   type: string
-                  enum: [pending, processing, delivered, cancel]
+                  enum: [pending, processing, dispatch, cancel]
                   example: processing
       responses:
         "200":
@@ -1365,7 +1365,7 @@ paths:
                     type: integer
                   processing:
                     type: integer
-                  delivered:
+                  dispatch:
                     type: integer
                   totalDoc:
                     type: integer
@@ -2179,7 +2179,7 @@ components:
           example: "card"
         status:
           type: string
-          enum: [pending, processing, delivered, cancel]
+          enum: [pending, processing, dispatch, cancel]
           example: "pending"
         invoice:
           type: number

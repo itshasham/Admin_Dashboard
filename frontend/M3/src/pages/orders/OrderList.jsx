@@ -61,6 +61,7 @@ const OrderList = () => {
   const normalizeStatus = (status) => {
     const value = String(status || "").toLowerCase();
     if (value === "cancelled" || value === "canceled") return "cancel";
+    if (value === "delivered" || value === "dispatched") return "dispatch";
     return value;
   };
 
@@ -86,7 +87,7 @@ const OrderList = () => {
   }, [orders, query, statusFilter]);
 
   const stats = useMemo(() => {
-    const counts = { pending: 0, processing: 0, delivered: 0, cancel: 0 };
+    const counts = { pending: 0, processing: 0, dispatch: 0, cancel: 0 };
     let revenue = 0;
     orders.forEach((order) => {
       const statusValue = normalizeStatus(order?.status);
@@ -109,7 +110,7 @@ const OrderList = () => {
 
   const statusClass = (status) => {
     const value = normalizeStatus(status);
-    if (value === "delivered") return "status-badge status-success";
+    if (value === "dispatch") return "status-badge status-success";
     if (value === "processing") return "status-badge status-info";
     if (value === "cancel") return "status-badge status-danger";
     if (value === "pending") return "status-badge status-warn";
@@ -149,9 +150,9 @@ const OrderList = () => {
           <span className="summary-chip">Needs action</span>
         </div>
         <div className="summary-card">
-          <span className="summary-label">Delivered</span>
-          <span className="summary-value">{stats.counts.delivered}</span>
-          <span className="summary-chip">Completed</span>
+          <span className="summary-label">Dispatch</span>
+          <span className="summary-value">{stats.counts.dispatch}</span>
+          <span className="summary-chip">In transit</span>
         </div>
       </div>
 
@@ -165,7 +166,7 @@ const OrderList = () => {
           />
         </div>
         <div className="pill-row">
-          {["all", "pending", "processing", "delivered", "cancel"].map((status) => (
+          {["all", "pending", "processing", "dispatch", "cancel"].map((status) => (
             <button
               key={status}
               className={`filter-pill ${statusFilter === status ? "active" : ""}`}
@@ -199,7 +200,7 @@ const OrderList = () => {
                   <td>{o?.paymentMethod || "-"}</td>
                   <td>{formatDate(o?.createdAt)}</td>
                   <td>{formatAmount(o?.totalAmount)}</td>
-                  <td><span className={statusClass(o?.status)}>{o?.status || "pending"}</span></td>
+                  <td><span className={statusClass(o?.status)}>{normalizeStatus(o?.status) || "pending"}</span></td>
                   <td>
                     <div className="actions">
                       {o?._id ? (

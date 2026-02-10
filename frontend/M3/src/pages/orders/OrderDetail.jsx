@@ -10,6 +10,15 @@ const OrderDetail = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [trackingId, setTrackingId] = useState("");
+  const [courierCompany, setCourierCompany] = useState("");
+  const courierCompanies = ["DHL", "TCS", "FedEx", "Blue Dart", "Leopards"];
+  const normalizeStatus = (value) => {
+    const statusValue = String(value || "").toLowerCase();
+    if (statusValue === "cancelled" || statusValue === "canceled") return "cancel";
+    if (statusValue === "delivered" || statusValue === "dispatched") return "dispatch";
+    return statusValue || "pending";
+  };
 
   const getAuthHeaders = () => {
     try {
@@ -234,7 +243,9 @@ const OrderDetail = () => {
         if (hasOrderFields) {
           console.log("Setting order data (lenient validation passed)");
           setOrder(ord);
-          if (ord?.status) setStatus(ord.status);
+          if (ord?.status) setStatus(normalizeStatus(ord.status));
+          setTrackingId(String(ord?.trackingId || ord?.trackingNumber || ""));
+          setCourierCompany(String(ord?.courierCompany || ord?.courierName || ""));
           
         } else {
           console.log("Order data failed lenient validation, trying emergency fallback...");
@@ -259,7 +270,9 @@ const OrderDetail = () => {
           
           console.log("Emergency fallback order created:", emergencyOrder);
           setOrder(emergencyOrder);
-          setStatus(emergencyOrder.status);
+          setStatus(normalizeStatus(emergencyOrder.status));
+          setTrackingId(String(emergencyOrder?.trackingId || emergencyOrder?.trackingNumber || ""));
+          setCourierCompany(String(emergencyOrder?.courierCompany || emergencyOrder?.courierName || ""));
         }
       } else {
         console.log("No order object found, creating emergency fallback...");
@@ -284,7 +297,7 @@ const OrderDetail = () => {
         
         console.log("Emergency fallback order created from ID:", emergencyOrder);
         setOrder(emergencyOrder);
-        setStatus("unknown");
+        setStatus(normalizeStatus("unknown"));
       }
     } catch (err) {
       console.error("Failed to load order:", err);
@@ -298,17 +311,34 @@ const OrderDetail = () => {
     if (!id) return;
     setSaving(true);
     try {
-      const resp = await fetch(`${API_BASE_URL}/order/update-status/${id}`, {
-        method: "PATCH",
+      const nextStatus = normalizeStatus(selectedStatus);
+      const sendStatus = nextStatus === "dispatch" ? "dispatched" : nextStatus;
+
+      if (sendStatus === "dispatched") {
+        if (!String(trackingId || "").trim() || !String(courierCompany || "").trim()) {
+          alert("trackingId and courierCompany are required to mark an order as dispatched.");
+          return;
+        }
+      }
+
+      const body = {
+        status: sendStatus,
+        ...(sendStatus === "dispatched"
+          ? { trackingId: String(trackingId).trim(), courierCompany: String(courierCompany).trim() }
+          : {}),
+      };
+
+      const resp = await fetch(`${API_BASE_URL}/admin/orders/${id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(body),
       });
       const isJson = resp.headers.get("content-type")?.includes("application/json");
       const data = isJson ? await resp.json().catch(() => ({})) : {};
-      if (!resp.ok) throw new Error(data?.message || "Failed to update status");
+      if (!resp.ok) throw new Error(data?.message || "Failed to update order");
       await fetchOrder();
     } catch (err) {
-      alert(err.message || "Failed to update status");
+      alert(err.message || "Failed to update order");
     } finally {
       setSaving(false);
     }
@@ -363,7 +393,19 @@ const OrderDetail = () => {
   }
 
   const fmtDateTime = (d) => { try { return d ? new Date(d).toLocaleString() : ""; } catch { return d || ""; } };
-  const statusClass = status === "delivered" ? "status-badge status-success" : status === "processing" ? "status-badge status-info" : status === "cancel" ? "status-badge status-danger" : "status-badge status-warn";
+  const currentStatus = normalizeStatus(order?.status || status);
+  const displayStatus = normalizeStatus(status || currentStatus);
+  const statusOptions = (() => {
+    // Flow: pending -> processing -> dispatch, but cancel is allowed at any step.
+    if (currentStatus === "pending") return ["pending", "processing", "cancel"];
+    if (currentStatus === "processing") return ["processing", "dispatch", "cancel"];
+    if (currentStatus === "dispatch") return ["dispatch", "cancel"];
+    if (currentStatus === "cancel") return ["cancel"];
+    return ["pending", "processing", "dispatch", "cancel"];
+  })();
+  const selectedStatus = statusOptions.includes(displayStatus) ? displayStatus : statusOptions[0];
+  const canUpdate = !saving && selectedStatus !== currentStatus;
+  const statusClass = displayStatus === "dispatch" ? "status-badge status-success" : displayStatus === "processing" ? "status-badge status-info" : displayStatus === "cancel" ? "status-badge status-danger" : "status-badge status-warn";
 
   // Wrap the entire render in a try-catch to prevent white screen
   try {
@@ -378,14 +420,29 @@ const OrderDetail = () => {
           </div>
         </div>
         <div className="order-hero-actions">
-          <span className={statusClass}>{status}</span>
-          <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="pending">pending</option>
-            <option value="processing">processing</option>
-            <option value="delivered">delivered</option>
-            <option value="cancel">cancel</option>
+          <span className={statusClass}>{displayStatus}</span>
+          <select className="select" value={selectedStatus} onChange={(e) => setStatus(e.target.value)}>
+            {statusOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
           </select>
-          <button className="btn" disabled={saving} onClick={updateStatus}>{saving ? "Saving..." : "Update"}</button>
+          {normalizeStatus(selectedStatus) === "dispatch" && currentStatus === "processing" && (
+            <>
+              <select className="select" value={courierCompany} onChange={(e) => setCourierCompany(e.target.value)}>
+                <option value="">Courier Company</option>
+                {courierCompanies.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <input
+                className="select"
+                placeholder="Tracking ID"
+                value={trackingId}
+                onChange={(e) => setTrackingId(e.target.value)}
+              />
+            </>
+          )}
+          <button className="btn" disabled={!canUpdate} onClick={updateStatus}>{saving ? "Saving..." : "Update"}</button>
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/orders")}>← Back</button>
         </div>
       </div>
@@ -428,7 +485,7 @@ const OrderDetail = () => {
             <li><span>Invoice</span><strong>{order?.invoice}</strong></li>
             <li><span>User</span><strong>{order?.user?.name || order?.user?._id || order?.user || "—"}</strong></li>
             <li><span>Items</span><strong>{(order?.cart || []).length}</strong></li>
-            <li><span>Status</span><strong className={statusClass}>{status}</strong></li>
+            <li><span>Status</span><strong className={statusClass}>{displayStatus}</strong></li>
           </ul>
         </div>
       </div>

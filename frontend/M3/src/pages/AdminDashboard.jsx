@@ -135,9 +135,9 @@ const AdminDashboard = () => {
   const yesterdayTotalPayment = Number(amounts.yesterDayCardPaymentAmount || 0) + Number(amounts.yesterDayCashPaymentAmount || 0);
   const statusTone = (status = "") => {
     const value = String(status).toLowerCase();
-    if (value === "delivered") return "success";
+    if (value === "dispatch" || value === "delivered" || value === "dispatched") return "success";
     if (value === "processing") return "info";
-    if (value === "cancel" || value === "cancelled") return "danger";
+    if (value === "cancel" || value === "cancelled" || value === "canceled") return "danger";
     return "warn";
   };
   const fmtDate = (value) => {
