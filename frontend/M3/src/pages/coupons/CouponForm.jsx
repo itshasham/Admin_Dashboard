@@ -68,6 +68,17 @@ const CouponForm = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [productTypes, setProductTypes] = useState([]);
+  const [role, setRole] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("adminData");
+      const parsed = raw ? JSON.parse(raw) : null;
+      setRole(String(parsed?.role || ""));
+    } catch {
+      setRole("");
+    }
+  }, []);
 
   // time controls
   const [startH, setStartH] = useState(0);
@@ -83,6 +94,25 @@ const CouponForm = () => {
       return {};
     }
   };
+
+  if (role === "Admin") {
+    return (
+      <div className="page-container">
+        <div className="page-header fancy">
+          <div>
+            <h2>Coupons</h2>
+            <p className="muted">View-only access</p>
+          </div>
+          <div className="actions">
+            <button className="btn secondary" onClick={() => (window.location.href = "/admin/coupons")}>← Back</button>
+          </div>
+        </div>
+        <div className="card" style={{ padding: 16 }}>
+          <div className="error">Access denied: Admins cannot create or edit coupons.</div>
+        </div>
+      </div>
+    );
+  }
 
   const loadProductTypes = async () => {
     try {

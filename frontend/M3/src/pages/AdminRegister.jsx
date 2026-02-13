@@ -65,6 +65,14 @@ const AdminRegister = () => {
     }
 
     try {
+      const requestBody = {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        // Role is optional. Backend will:
+        // - bootstrap first user as CEO
+        // - otherwise default to Admin unless explicitly set by an authorized caller
+      };
       const response = await fetch(`${API_BASE_URL}/admin/register`, {
         method: 'POST',
         headers: {

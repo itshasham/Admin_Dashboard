@@ -3,6 +3,197 @@ import { useNavigate } from 'react-router-dom';
 import './AdminDashboard.css';
 import { API_BASE_URL } from '../config/api';
 
+const pad2 = (n) => String(n).padStart(2, "0");
+const toISODate = (d) => {
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+};
+const addDays = (d, days) => {
+  const dt = new Date(d);
+  dt.setDate(dt.getDate() + days);
+  return dt;
+};
+const formatCompact = (n) => {
+  const num = Number(n) || 0;
+  if (Math.abs(num) >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(num) >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return String(Math.round(num));
+};
+const niceStep = (max, ticks = 5) => {
+  const m = Math.max(0, Number(max) || 0);
+  if (m === 0) return 1;
+  const raw = m / Math.max(1, ticks);
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const frac = raw / pow;
+  const niceFrac = frac <= 1 ? 1 : frac <= 2 ? 2 : frac <= 5 ? 5 : 10;
+  return niceFrac * pow;
+};
+const buildTicks = (max, ticks = 5) => {
+  const step = niceStep(max, ticks);
+  const top = Math.ceil((Number(max) || 0) / step) * step;
+  const out = [];
+  for (let v = 0; v <= top + 0.0001; v += step) out.push(v);
+  return out;
+};
+
+const buildLast7Days = () => {
+  const today = new Date();
+  const series = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = addDays(today, -i);
+    const iso = toISODate(d);
+    series.push({ date: iso, label: iso.slice(5), total: 0, order: 0 });
+  }
+  return series;
+};
+
+const SalesChart = ({ data }) => {
+  // Responsive SVG via viewBox.
+  const W = 560, H = 240;
+  const M = { l: 54, r: 14, t: 18, b: 46 };
+  const innerW = W - M.l - M.r;
+  const innerH = H - M.t - M.b;
+
+  const max = Math.max(...data.map((d) => Number(d.total) || 0), 0);
+  const ticks = max === 0 ? [0, 250, 500, 750, 1000] : buildTicks(max, 4);
+  const top = max === 0 ? 1000 : (ticks[ticks.length - 1] || 1);
+
+  const xFor = (i) => M.l + (data.length <= 1 ? innerW / 2 : (i * innerW) / (data.length - 1));
+  const yFor = (v) => M.t + innerH - (Math.max(0, Number(v) || 0) / (top || 1)) * innerH;
+
+  const lineD = data
+    .map((d, i) => `${i === 0 ? "M" : "L"} ${xFor(i).toFixed(2)} ${yFor(d.total).toFixed(2)}`)
+    .join(" ");
+
+  const areaD = `M ${xFor(0).toFixed(2)} ${yFor(0).toFixed(2)} ` +
+    data.map((d, i) => `L ${xFor(i).toFixed(2)} ${yFor(d.total).toFixed(2)}`).join(" ") +
+    ` L ${xFor(data.length - 1).toFixed(2)} ${yFor(0).toFixed(2)} Z`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "240px", display: "block" }}>
+      <defs>
+        <linearGradient id="salesFill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="rgba(15,118,110,0.35)" />
+          <stop offset="1" stopColor="rgba(15,118,110,0.02)" />
+        </linearGradient>
+      </defs>
+
+      {/* Grid + Y ticks */}
+      {ticks.map((t) => {
+        const y = yFor(t);
+        return (
+          <g key={t}>
+            <line x1={M.l} x2={W - M.r} y1={y} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+            <text x={M.l - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#52617a">
+              {formatCompact(t)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Axes */}
+      <line x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} stroke="#94a3b8" strokeWidth="1" />
+      <line x1={M.l} x2={W - M.r} y1={H - M.b} y2={H - M.b} stroke="#94a3b8" strokeWidth="1" />
+
+      {/* Series */}
+      <path d={areaD} fill="url(#salesFill)" />
+      <path d={lineD} fill="none" stroke="#0f766e" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+      {data.map((d, i) => (
+        <circle key={i} cx={xFor(i)} cy={yFor(d.total)} r="4" fill="#0f766e" stroke="#ffffff" strokeWidth="2">
+          <title>{`${d.label}: ${Number(d.total) || 0}`}</title>
+        </circle>
+      ))}
+
+      {/* X labels */}
+      {data.map((d, i) => (
+        <text
+          key={i}
+          x={xFor(i)}
+          y={H - M.b + 18}
+          textAnchor="middle"
+          fontSize="11"
+          fill="#52617a"
+        >
+          {d.label}
+        </text>
+      ))}
+
+      <text x={M.l} y={H - 10} fontSize="11" fill="#52617a">Date (MM-DD)</text>
+      <text x={14} y={M.t + 10} fontSize="11" fill="#52617a">Sales</text>
+    </svg>
+  );
+};
+
+const CategoryChart = ({ data }) => {
+  const W = 560, H = 240;
+  const M = { l: 54, r: 14, t: 18, b: 64 };
+  const innerW = W - M.l - M.r;
+  const innerH = H - M.t - M.b;
+
+  const max = Math.max(...data.map((d) => Number(d.count) || 0), 0);
+  const ticks = max === 0 ? [0, 1, 2, 3, 4, 5] : buildTicks(max, 4);
+  const top = max === 0 ? 5 : (ticks[ticks.length - 1] || 1);
+
+  const n = Math.max(1, data.length);
+  const gap = 10;
+  const barW = Math.max(14, Math.floor((innerW - gap * (n - 1)) / n));
+  const xFor = (i) => M.l + i * (barW + gap);
+  const yFor = (v) => M.t + innerH - (Math.max(0, Number(v) || 0) / (top || 1)) * innerH;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "240px", display: "block" }}>
+      {/* Grid + Y ticks */}
+      {ticks.map((t) => {
+        const y = yFor(t);
+        return (
+          <g key={t}>
+            <line x1={M.l} x2={W - M.r} y1={y} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+            <text x={M.l - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#52617a">
+              {formatCompact(t)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Axes */}
+      <line x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} stroke="#94a3b8" strokeWidth="1" />
+      <line x1={M.l} x2={W - M.r} y1={H - M.b} y2={H - M.b} stroke="#94a3b8" strokeWidth="1" />
+
+      {/* Bars */}
+      {data.map((c, i) => {
+        const v = Number(c.count) || 0;
+        const x = xFor(i);
+        const y = yFor(v);
+        const h = (H - M.b) - y;
+        const label = String(c._id || "—");
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={barW} height={Math.max(2, h)} rx="6" fill="#f97316">
+              <title>{`${label}: ${v}`}</title>
+            </rect>
+            <text x={x + barW / 2} y={y - 6} textAnchor="middle" fontSize="11" fill="#0f172a">
+              {v}
+            </text>
+            <text
+              x={x + barW / 2}
+              y={H - M.b + 18}
+              textAnchor="end"
+              fontSize="11"
+              fill="#52617a"
+              transform={`rotate(-35 ${x + barW / 2} ${H - M.b + 18})`}
+            >
+              {label.length > 14 ? `${label.slice(0, 14)}…` : label}
+            </text>
+          </g>
+        );
+      })}
+
+      <text x={M.l} y={H - 10} fontSize="11" fill="#52617a">Category</text>
+      <text x={14} y={M.t + 10} fontSize="11" fill="#52617a">Qty</text>
+    </svg>
+  );
+};
+
 const AdminDashboard = () => {
   const [adminData, setAdminData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +210,7 @@ const AdminDashboard = () => {
     yesterDayCardPaymentAmount: 0,
     yesterDayCashPaymentAmount: 0,
   });
-  const [salesReport, setSalesReport] = useState([]); // [{ date, total, order }]
+  const [salesReport, setSalesReport] = useState(buildLast7Days()); // [{ date, total, order }]
   const [categoryData, setCategoryData] = useState([]); // [{ _id, count }]
   const [recentOrders, setRecentOrders] = useState({ orders: [], totalOrder: 0 });
 
@@ -66,13 +257,10 @@ const AdminDashboard = () => {
 
   const canAccessStaffManagement = () => {
     if (!adminData) return false;
-    return ['Manager', 'CEO', 'Admin'].includes(adminData.role);
-  };
-
-  const canEditStaff = () => {
-    if (!adminData) return false;
     return ['Manager', 'CEO'].includes(adminData.role);
   };
+
+  const canViewCustomers = () => adminData?.role === "CEO";
 
   // Fetch user-order dashboard data
   useEffect(() => {
@@ -92,7 +280,24 @@ const AdminDashboard = () => {
           cache: 'no-store',
         });
         const sJson = (sResp.headers.get('content-type') || '').includes('application/json') ? await sResp.json() : {};
-        if (sResp.ok && Array.isArray(sJson?.salesReport)) setSalesReport(sJson.salesReport);
+        if (sResp.ok && Array.isArray(sJson?.salesReport)) {
+          // Always show last 7 days on X axis (including 0s for missing days).
+          const map = new Map((sJson.salesReport || []).map((r) => [String(r?.date || ""), r]));
+          const today = new Date();
+          const series = [];
+          for (let i = 6; i >= 0; i--) {
+            const d = addDays(today, -i);
+            const iso = toISODate(d);
+            const row = map.get(iso);
+            series.push({
+              date: iso,
+              label: iso.slice(5), // MM-DD
+              total: Number(row?.total) || 0,
+              order: Number(row?.order) || 0,
+            });
+          }
+          setSalesReport(series);
+        }
 
         // most selling categories
         const cResp = await fetch(`${API_BASE_URL}/user-order/most-selling-category`, {
@@ -172,13 +377,17 @@ const AdminDashboard = () => {
             {canAccessStaffManagement() && (
               <button onClick={() => navigateTo('/admin/staff')} className="nav-item">Staff Management</button>
             )}
-            <button onClick={() => navigateTo('/admin/users')} className="nav-item">Users</button>
+            {canViewCustomers() && (
+              <button onClick={() => navigateTo('/admin/users')} className="nav-item">Customers</button>
+            )}
             <button onClick={() => navigateTo('/admin/products')} className="nav-item">Products</button>
+            <button onClick={() => navigateTo('/admin/clinical-products')} className="nav-item">Clinical Products</button>
+            <button onClick={() => navigateTo('/admin/machines')} className="nav-item">Machines</button>
             <button onClick={() => navigateTo('/admin/orders')} className="nav-item">Orders</button>
             <button onClick={() => navigateTo('/admin/brands')} className="nav-item">Brands</button>
             <button onClick={() => navigateTo('/admin/categories')} className="nav-item">Categories</button>
             <button onClick={() => navigateTo('/admin/coupons')} className="nav-item">Coupons</button>
-            <button onClick={() => navigateTo('/admin/cloudinary')} className="nav-item">Cloudinary</button>
+            <button onClick={() => navigateTo('/admin/cloudinary')} className="nav-item">Image Manager</button>
             <button onClick={() => navigateTo('/admin/settings')} className="nav-item">Settings</button>
           </nav>
         </div>
@@ -263,26 +472,12 @@ const AdminDashboard = () => {
           <div className="grid-two">
             <div className="card chart-card">
               <div className="card-header"><h2>Last 7 Days Sales</h2></div>
-              <div className="bar-chart">
-                {salesReport.map((s, idx) => (
-                  <div key={idx} className="bar-item" title={`${s.date}: ${s.total}`}>
-                    <div className="bar" style={{ height: `${(Number(s.total) || 0) / maxSales * 100}%` }} />
-                    <span className="bar-label">{String(s.date).slice(5)}</span>
-                  </div>
-                ))}
-              </div>
+              <SalesChart data={salesReport} />
             </div>
 
             <div className="card chart-card">
               <div className="card-header"><h2>Top Categories</h2></div>
-              <div className="bar-chart">
-                {categoryData.map((c, idx) => (
-                  <div key={idx} className="bar-item" title={`${c._id}: ${c.count}`}>
-                    <div className="bar bar-secondary" style={{ height: `${(Number(c.count) || 0) / maxCat * 100}%` }} />
-                    <span className="bar-label">{String(c._id).slice(0, 8)}</span>
-                  </div>
-                ))}
-              </div>
+              <CategoryChart data={categoryData} />
             </div>
           </div>
 

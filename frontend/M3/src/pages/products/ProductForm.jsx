@@ -20,6 +20,40 @@ const emptyProduct = {
   imageURLs: [],
 };
 
+const pickCloudinaryArray = (payload) => {
+  if (!payload || typeof payload !== "object") return [];
+  if (Array.isArray(payload.images)) return payload.images;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (payload.data && Array.isArray(payload.data.images)) return payload.data.images;
+  return [];
+};
+
+const toImageObject = (entry) => {
+  const imageUrl = typeof entry === "string" ? entry : entry?.img || entry?.url || "";
+  const url = String(imageUrl || "").trim();
+  if (!url) return null;
+  return {
+    ...(typeof entry === "object" && entry ? entry : {}),
+    img: url,
+    color: (typeof entry === "object" && entry?.color) || { name: "default", value: "#000000" },
+  };
+};
+
+const normalizeImageCollection = (images) => {
+  const list = Array.isArray(images) ? images : [];
+  const seen = new Set();
+  const normalized = [];
+  list.forEach((entry) => {
+    const image = toImageObject(entry);
+    if (!image?.img) return;
+    const key = image.img.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    normalized.push(image);
+  });
+  return normalized;
+};
+
 const ProductForm = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
@@ -32,7 +66,13 @@ const ProductForm = () => {
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
-  const [newImageUrl, setNewImageUrl] = useState("");
+  const [imageManagerOpen, setImageManagerOpen] = useState(false);
+  const [imageManagerTarget, setImageManagerTarget] = useState("additional");
+  const [imageManagerLoading, setImageManagerLoading] = useState(false);
+  const [imageManagerError, setImageManagerError] = useState("");
+  const [imageManagerQuery, setImageManagerQuery] = useState("");
+  const [imageManagerImages, setImageManagerImages] = useState([]);
+  const [selectedImageUrls, setSelectedImageUrls] = useState({});
 
   const getAuthHeaders = () => {
     try {
@@ -82,6 +122,27 @@ const ProductForm = () => {
   };
 
   const digitsOnly = (val) => (typeof val === "string" ? (val.match(/\d+/g)?.join("") || "") : val);
+
+  const mergeImages = (incomingUrls) => {
+    const urls = Array.isArray(incomingUrls)
+      ? incomingUrls.map((entry) => String(entry || "").trim()).filter(Boolean)
+      : [];
+    if (!urls.length) return;
+
+    setProduct((prev) => {
+      const existing = normalizeImageCollection(prev.imageURLs);
+      const seen = new Set(existing.map((entry) => entry.img.toLowerCase()));
+      const appended = [...existing];
+      urls.forEach((url) => {
+        const key = url.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        const next = toImageObject(url);
+        if (next) appended.push(next);
+      });
+      return { ...prev, imageURLs: appended };
+    });
+  };
 
   const fetchBrands = async () => {
     setLoadingBrands(true);
@@ -235,7 +296,12 @@ const ProductForm = () => {
         if (!resp.ok) throw new Error(data?.message || "Failed to load product");
         const payload = data?.data || data?.product || data || emptyProduct;
         const normalizedUnit = digitsOnly(payload.unit || "");
-        setProduct({ ...emptyProduct, ...payload, unit: normalizedUnit });
+        setProduct({
+          ...emptyProduct,
+          ...payload,
+          unit: normalizedUnit,
+          imageURLs: normalizeImageCollection(payload?.imageURLs),
+        });
         const start = toYMD(payload?.offerDate?.startDate) || todayYMD();
         const end = toYMD(payload?.offerDate?.endDate) || "";
         setOfferStart(start);
@@ -248,6 +314,47 @@ const ProductForm = () => {
     fetchBrands(); // Fetch brands for dropdown
     fetchCategories(); // Fetch categories for dropdown
   }, [id, isEdit]);
+
+  const fetchImageManagerImages = async (queryText = imageManagerQuery) => {
+    setImageManagerLoading(true);
+    setImageManagerError("");
+    try {
+      const url = new URL(`${API_BASE_URL}/cloudinary/images`);
+      if (String(queryText || "").trim()) {
+        url.searchParams.set("q", String(queryText).trim());
+      }
+      const resp = await fetch(url.toString(), {
+        headers: { ...getAuthHeaders() },
+        cache: "no-store",
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || data?.error || "Failed to load image manager");
+
+      const normalized = pickCloudinaryArray(data)
+        .map((entry, idx) => ({
+          id: entry?._id || entry?.publicId || entry?.id || `manager-image-${idx}`,
+          publicId: entry?.publicId || entry?.id || "",
+          url: String(entry?.url || entry?.img || "").trim(),
+        }))
+        .filter((entry) => entry.url);
+
+      const uniqueMap = new Map();
+      normalized.forEach((entry) => {
+        if (!uniqueMap.has(entry.url)) uniqueMap.set(entry.url, entry);
+      });
+      setImageManagerImages(Array.from(uniqueMap.values()));
+    } catch (err) {
+      setImageManagerError(err.message || "Failed to load image manager");
+      setImageManagerImages([]);
+    } finally {
+      setImageManagerLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!imageManagerOpen) return;
+    fetchImageManagerImages();
+  }, [imageManagerOpen]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -319,27 +426,57 @@ const ProductForm = () => {
     }
   };
 
-  const handleAddImage = () => {
-    if (newImageUrl.trim() && newImageUrl.startsWith('http')) {
-      const newImage = {
-        img: newImageUrl.trim(),
-        color: { name: "default", value: "#000000" } // Default color structure
-      };
-      
-      setProduct(prev => ({
-        ...prev,
-        imageURLs: [...(prev.imageURLs || []), newImage]
-      }));
-      setNewImageUrl("");
-    }
-  };
-
   const handleRemoveImage = (index) => {
     setProduct(prev => ({
       ...prev,
-      imageURLs: prev.imageURLs.filter((_, i) => i !== index)
+      imageURLs: normalizeImageCollection(prev.imageURLs).filter((_, i) => i !== index),
     }));
   };
+
+  const openImageManager = (target = "additional") => {
+    setImageManagerTarget(target === "main" ? "main" : "additional");
+    setSelectedImageUrls({});
+    setImageManagerError("");
+    setImageManagerOpen(true);
+  };
+
+  const closeImageManager = () => {
+    setImageManagerOpen(false);
+    setImageManagerTarget("additional");
+    setSelectedImageUrls({});
+    setImageManagerError("");
+    setImageManagerQuery("");
+  };
+
+  const toggleImageSelection = (url) => {
+    const safeUrl = String(url || "").trim();
+    if (!safeUrl) return;
+
+    if (imageManagerTarget === "main") {
+      setProduct((prev) => ({ ...prev, img: safeUrl }));
+      closeImageManager();
+      return;
+    }
+
+    setSelectedImageUrls((prev) => ({
+      ...prev,
+      [safeUrl]: !prev[safeUrl],
+    }));
+  };
+
+  const addSelectedImages = () => {
+    if (imageManagerTarget === "main") return;
+    const selectedUrls = Object.keys(selectedImageUrls).filter((url) => selectedImageUrls[url]);
+    if (!selectedUrls.length) {
+      setImageManagerError("Select at least one image.");
+      return;
+    }
+    mergeImages(selectedUrls);
+    closeImageManager();
+  };
+
+  const selectedImageCount = Object.keys(selectedImageUrls).filter((url) => selectedImageUrls[url]).length;
+  const isSelectingMainImage = imageManagerTarget === "main";
 
   const extractValidationMessage = (data) => {
     if (!data) return "Validation failed";
@@ -422,7 +559,7 @@ const ProductForm = () => {
         status: product.status,
         productType: product.productType,
         description: product.description,
-        imageURLs: product.imageURLs || [],
+        imageURLs: normalizeImageCollection(product.imageURLs),
       };
 
       const startISO = toISODateStart(offerStart);
@@ -443,7 +580,7 @@ const ProductForm = () => {
           id: product.category?.id || ""
         },
         children: product.children || "",
-        imageURLs: Array.isArray(product.imageURLs) ? product.imageURLs : []
+        imageURLs: normalizeImageCollection(product.imageURLs),
       };
 
       const resp = await fetch(url, {
@@ -522,7 +659,10 @@ const ProductForm = () => {
               <span className="hint">Show the product clearly</span>
             </div>
             <label>Main Image URL</label>
-            <input name="img" placeholder="https://example.com/image.jpg" value={product.img} onChange={handleChange} />
+            <div className="image-input-row image-main-url-row">
+              <input name="img" placeholder="https://example.com/image.jpg" value={product.img} onChange={handleChange} />
+              <button type="button" className="btn secondary" onClick={() => openImageManager("main")}>Select Image URL</button>
+            </div>
             <div className="preview-row">
               <div className="preview">
                 {product.img ? (
@@ -533,26 +673,17 @@ const ProductForm = () => {
               </div>
             </div>
             <label>Additional Images</label>
-            <div className="image-input-row">
-              <input
-                type="url"
-                placeholder="https://example.com/additional-image.jpg"
-                value={newImageUrl}
-                onChange={(e) => setNewImageUrl(e.target.value)}
-              />
-              <button
-                type="button"
-                className="btn ghost"
-                onClick={handleAddImage}
-                disabled={!newImageUrl.trim() || !newImageUrl.startsWith('http')}
-              >
-                Add
-              </button>
+            <div className="actions" style={{ marginTop: 8 }}>
+              <button type="button" className="btn secondary" onClick={() => openImageManager("additional")}>Select Multiple Images</button>
+              {Array.isArray(product.imageURLs) && product.imageURLs.length > 0 && (
+                <button type="button" className="btn ghost" onClick={() => setProduct((prev) => ({ ...prev, imageURLs: [] }))}>Clear All</button>
+              )}
             </div>
+            <div className="subtext">Choose images from Image Manager and URLs are auto-added.</div>
 
             {product.imageURLs && product.imageURLs.length > 0 && (
               <div className="image-grid">
-                {product.imageURLs.map((imageObj, index) => (
+                {normalizeImageCollection(product.imageURLs).map((imageObj, index) => (
                   <div key={index} className="image-tile">
                     <img
                       src={imageObj.img}
@@ -772,6 +903,63 @@ const ProductForm = () => {
           </form>
         </div>
       </div>
+
+      {imageManagerOpen && (
+        <div className="image-manager-modal-overlay" role="dialog" aria-modal="true" onClick={closeImageManager}>
+          <div className="image-manager-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="section-title">
+              <h3>{isSelectingMainImage ? "Select Main Image" : "Select Additional Images"}</h3>
+              <span className="hint">
+                {isSelectingMainImage ? "Click one image to auto-fill Main Image URL." : "Select multiple images and add all selected URLs automatically."}
+              </span>
+            </div>
+
+            <div className="image-input-row image-input-row-three">
+              <input
+                value={imageManagerQuery}
+                onChange={(event) => setImageManagerQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    fetchImageManagerImages(event.currentTarget.value);
+                  }
+                }}
+                placeholder="Search by image id or URL"
+              />
+              <button type="button" className="btn ghost" onClick={() => fetchImageManagerImages(imageManagerQuery)} disabled={imageManagerLoading}>
+                {imageManagerLoading ? "Loading..." : "Search"}
+              </button>
+              <button type="button" className="btn secondary" onClick={closeImageManager}>Close</button>
+            </div>
+
+            {imageManagerError && <div className="error" style={{ marginTop: 8 }}>{imageManagerError}</div>}
+
+            <div className="image-manager-grid">
+              {imageManagerImages.map((entry, idx) => (
+                <button
+                  key={`${entry.id}-${idx}`}
+                  type="button"
+                  className={`image-tile selectable ${!isSelectingMainImage && selectedImageUrls[entry.url] ? "selected" : ""}`}
+                  onClick={() => toggleImageSelection(entry.url)}
+                >
+                  <img src={entry.url} alt={entry.publicId || `manager-image-${idx + 1}`} />
+                  <span className="image-select-chip">{isSelectingMainImage ? "Set Main" : (selectedImageUrls[entry.url] ? "Selected" : "Select")}</span>
+                </button>
+              ))}
+              {!imageManagerLoading && !imageManagerImages.length && (
+                <div className="image-empty">No images found in image manager.</div>
+              )}
+            </div>
+
+            {!isSelectingMainImage && (
+              <div className="actions" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+                <span className="subtext">{selectedImageCount} selected</span>
+                <button type="button" className="btn" onClick={addSelectedImages} disabled={!selectedImageCount}>Add Selected Images</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./cloudinary.css";
 import { API_BASE_URL } from '../../config/api';
 
@@ -8,8 +8,8 @@ const CloudinaryPage = () => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [images, setImages] = useState([]);
-  const [folder, setFolder] = useState("products");
-  const [deleteId, setDeleteId] = useState("");
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState("");
 
   const getAuthHeaders = () => {
     try {
@@ -20,6 +20,34 @@ const CloudinaryPage = () => {
     }
   };
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("adminData");
+      const parsed = raw ? JSON.parse(raw) : null;
+      setRole(String(parsed?.role || ""));
+    } catch {
+      setRole("");
+    }
+  }, []);
+
+  const fetchImages = async () => {
+    setError("");
+    try {
+      const url = new URL(`${API_BASE_URL}/cloudinary/images`);
+      if (query.trim()) url.searchParams.set("q", query.trim());
+      const resp = await fetch(url.toString(), { headers: { ...getAuthHeaders() }, cache: "no-store" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || data?.error || "Failed to load images");
+      const list = Array.isArray(data?.images) ? data.images : (Array.isArray(data?.data) ? data.data : []);
+      setImages(list);
+    } catch (err) {
+      setError(err.message || "Failed to load images");
+      setImages([]);
+    }
+  };
+
+  useEffect(() => { fetchImages(); }, []); // initial load
+
   const handleSingleUpload = async (e) => {
     e.preventDefault();
     if (!singleFile) return setError("Please choose an image");
@@ -29,10 +57,12 @@ const CloudinaryPage = () => {
       fd.append("image", singleFile);
       const resp = await fetch(`${API_BASE_URL}/cloudinary/add-img`, { method: "POST", headers: { ...getAuthHeaders() }, body: fd });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.message || "Upload failed");
+      if (!resp.ok) throw new Error(data?.message || data?.error || "Upload failed");
       const img = data?.data || data; // { url, id }
       setImages((prev) => [img, ...prev]);
       setSingleFile(null);
+      // Keep the list in sync (ensures _id is available for delete).
+      await fetchImages();
     } catch (err) {
       setError(err.message || "Upload failed");
     } finally {
@@ -49,10 +79,11 @@ const CloudinaryPage = () => {
       Array.from(multiFiles).slice(0, 5).forEach((f) => fd.append("images", f));
       const resp = await fetch(`${API_BASE_URL}/cloudinary/add-multiple-img`, { method: "POST", headers: { ...getAuthHeaders() }, body: fd });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.message || "Upload failed");
+      if (!resp.ok) throw new Error(data?.message || data?.error || "Upload failed");
       const list = data?.data || [];
       setImages((prev) => [...list, ...prev]);
       setMultiFiles([]);
+      await fetchImages();
     } catch (err) {
       setError(err.message || "Upload failed");
     } finally {
@@ -60,20 +91,35 @@ const CloudinaryPage = () => {
     }
   };
 
-  const handleDelete = async (imgId) => {
-    const idToDelete = imgId || deleteId;
-    if (!idToDelete || !folder) return setError("Provide folder and id");
+  const copyUrl = async (url) => {
+    const value = String(url || "");
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = value;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  };
+
+  const handleDelete = async (img) => {
+    const idOrPublic = img?._id || img?.publicId;
+    if (!idOrPublic) return;
     if (!window.confirm("Delete this image?")) return;
     setUploading(true); setError("");
     try {
-      const url = new URL(`${API_BASE_URL}/cloudinary/img-delete`);
-      url.searchParams.set("folder_name", folder);
-      url.searchParams.set("id", idToDelete);
-      const resp = await fetch(url.toString(), { method: "DELETE", headers: { ...getAuthHeaders() } });
+      const safeId = encodeURIComponent(String(idOrPublic));
+      const resp = await fetch(`${API_BASE_URL}/cloudinary/images/${safeId}`, { method: "DELETE", headers: { ...getAuthHeaders() } });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.message || "Delete failed");
-      setImages((prev) => prev.filter((im) => (im?.id || im?._id) !== idToDelete));
-      setDeleteId("");
+      if (!resp.ok) throw new Error(data?.message || data?.error || "Delete failed");
+      setImages((prev) => prev.filter((im) => (im?._id || im?.publicId) !== idOrPublic));
     } catch (err) {
       setError(err.message || "Delete failed");
     } finally {
@@ -81,12 +127,29 @@ const CloudinaryPage = () => {
     }
   };
 
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return images;
+    return images.filter((im) => {
+      const hay = [im?.publicId, im?.folder, im?.url].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [images, query]);
+
+  if (role && !["CEO", "Manager", "Admin"].includes(role)) {
+    return (
+      <div className="page-container">
+        <div className="error">Access denied</div>
+      </div>
+    );
+  }
+
   return (
     <div className="page-container">
       <div className="page-header fancy">
         <div>
-          <h2>Cloudinary</h2>
-          <p className="muted">Upload and manage media with ease</p>
+          <h2>Image Manager</h2>
+          <p className="muted">Upload, copy URLs, and reuse images for products</p>
         </div>
         <div className="actions">
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
@@ -114,35 +177,32 @@ const CloudinaryPage = () => {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h3>Delete Image</h3>
-        <div className="grid two-col gap-16">
-          <div className="field">
-            <label>Folder Name</label>
-            <input value={folder} onChange={(e) => setFolder(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Public ID</label>
-            <input value={deleteId} onChange={(e) => setDeleteId(e.target.value)} placeholder="e.g., products/abc123xyz" />
+        <div className="card-header">
+          <h3 style={{ margin: 0 }}>All Images</h3>
+          <div className="actions">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by folder / id / url"
+              style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border)" }}
+            />
+            <button className="btn secondary" onClick={fetchImages} disabled={uploading}>Refresh</button>
           </div>
         </div>
-        <div className="actions" style={{ marginTop: 12 }}>
-          <button className="btn danger" onClick={() => handleDelete()}>Delete by ID</button>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginTop: 16 }}>
-        <h3>Recent Uploads</h3>
         <div className="gallery">
-          {images.map((im, idx) => (
-            <div className="gallery-item fade-in" key={(im?.id || im?._id || idx)}>
-              <img src={im?.url || im} alt="upload" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+          {filtered.map((im, idx) => (
+            <div className="gallery-item fade-in" key={(im?._id || im?.publicId || idx)}>
+              <img src={im?.url || ""} alt={im?.publicId || "upload"} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
               <div className="gallery-meta">
-                <div className="meta-id">{im?.id || im?._id || ""}</div>
-                <button className="btn danger" onClick={() => handleDelete(im?.id || im?._id)}>Delete</button>
+                <div className="meta-id" title={im?.publicId || ""}>{im?.publicId || ""}</div>
+                <div className="gallery-actions">
+                  <button className="btn secondary" onClick={() => copyUrl(im?.url)}>Copy URL</button>
+                  <button className="btn danger" onClick={() => handleDelete(im)} disabled={uploading}>Delete</button>
+                </div>
               </div>
             </div>
           ))}
-          {!images.length && <div className="muted">No uploads yet</div>}
+          {!filtered.length && <div className="muted">No images found</div>}
         </div>
       </div>
     </div>

@@ -8,6 +8,17 @@ const CouponList = () => {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [role, setRole] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("adminData");
+      const parsed = raw ? JSON.parse(raw) : null;
+      setRole(String(parsed?.role || ""));
+    } catch {
+      setRole("");
+    }
+  }, []);
 
   const getAuthHeaders = () => {
     try {
@@ -114,7 +125,9 @@ const CouponList = () => {
         </div>
         <div className="actions">
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
-          <button className="btn" onClick={() => (window.location.href = "/admin/coupons/new")}>+ Add New Coupon</button>
+          {role !== "Admin" && (
+            <button className="btn" onClick={() => (window.location.href = "/admin/coupons/new")}>+ Add New Coupon</button>
+          )}
         </div>
       </div>
       <div className="summary-grid">
@@ -201,8 +214,14 @@ const CouponList = () => {
                     <td>{fmt(c?.endTime)}</td>
                     <td>
                       <div className="actions">
-                        <button className="btn" disabled={!id} onClick={() => (window.location.href = id ? `/admin/coupons/${id}` : "/admin/coupons")}>Edit</button>
-                        <button className="btn danger" disabled={!id} onClick={() => handleDelete(id)}>Delete</button>
+                        {role !== "Admin" ? (
+                          <>
+                            <button className="btn" disabled={!id} onClick={() => (window.location.href = id ? `/admin/coupons/${id}` : "/admin/coupons")}>Edit</button>
+                            <button className="btn danger" disabled={!id} onClick={() => handleDelete(id)}>Delete</button>
+                          </>
+                        ) : (
+                          <span className="muted">View only</span>
+                        )}
                       </div>
                     </td>
                   </tr>

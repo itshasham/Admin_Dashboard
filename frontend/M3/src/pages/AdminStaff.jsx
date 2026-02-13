@@ -15,7 +15,7 @@ const AdminStaff = () => {
     email: '',
     password: '',
     phone: '',
-    role: 'Staff',
+    role: 'Admin',
     image: ''
   });
   const navigate = useNavigate();
@@ -35,8 +35,8 @@ const AdminStaff = () => {
         const userData = JSON.parse(adminData);
         setCurrentUser(userData);
         
-        // Only Manager, CEO, and Admin can access staff management
-        if (userData.role !== 'Manager' && userData.role !== 'CEO' && userData.role !== 'Admin') {
+        // Only Manager and CEO can access staff management (per RBAC rules).
+        if (userData.role !== 'Manager' && userData.role !== 'CEO') {
           setAccessDenied(true);
           setLoading(false);
           return;
@@ -52,9 +52,11 @@ const AdminStaff = () => {
   }, [navigate]);
 
   // Check if user can edit/delete staff
-  const canEditStaff = () => {
+  const canEditStaff = (targetRole) => {
     if (!currentUser) return false;
-    return ['Manager', 'CEO'].includes(currentUser.role);
+    if (currentUser.role === 'CEO') return true;
+    // Manager can only manage Admin-level users.
+    return currentUser.role === 'Manager' && targetRole === 'Admin';
   };
 
   // Check if user can add new staff
@@ -141,7 +143,7 @@ const AdminStaff = () => {
           email: '',
           password: '',
           phone: '',
-          role: 'Staff',
+          role: 'Admin',
           image: ''
         });
         fetchStaff();
@@ -162,7 +164,7 @@ const AdminStaff = () => {
       email: staffMember.email || '',
       password: '',
       phone: staffMember.phone || '',
-      role: staffMember.role || 'Staff',
+      role: staffMember.role || 'Admin',
       image: staffMember.image || ''
     });
     setShowAddForm(true);
@@ -202,7 +204,7 @@ const AdminStaff = () => {
       email: '',
       password: '',
       phone: '',
-      role: 'Staff',
+      role: 'Admin',
       image: ''
     });
   };
@@ -214,7 +216,7 @@ const AdminStaff = () => {
         <div className="access-denied">
           <h1>Access Denied</h1>
           <p>You don't have permission to access Staff Management.</p>
-          <p>Only Managers, CEOs, and Admins can access this page.</p>
+          <p>Only Managers and CEOs can access this page.</p>
           <button onClick={() => navigate('/admin/dashboard')} className="back-btn">
             Back to Dashboard
           </button>
@@ -236,6 +238,13 @@ const AdminStaff = () => {
       <div className="staff-header">
         <h1>Staff Management</h1>
         <div className="header-info">
+          <button
+            type="button"
+            onClick={() => navigate('/admin/dashboard')}
+            className="back-dashboard-btn"
+          >
+            ← Back
+          </button>
           <span className="user-role">Logged in as: {currentUser?.role || 'Unknown'}</span>
           {canAddStaff() && (
             <button 
@@ -251,10 +260,10 @@ const AdminStaff = () => {
       {/* Show role-based info */}
       <div className="role-permissions-info">
         <div className="permission-badge">
-          {currentUser?.role === 'Admin' && (
-            <span className="permission-text">📖 Read-Only Access</span>
+          {currentUser?.role === 'Manager' && (
+            <span className="permission-text">Managers: can manage Admin users only</span>
           )}
-          {(currentUser?.role === 'Manager' || currentUser?.role === 'CEO') && (
+          {currentUser?.role === 'CEO' && (
             <span className="permission-text">✏️ Full Access - Can Edit & Delete</span>
           )}
         </div>
@@ -312,15 +321,26 @@ const AdminStaff = () => {
 
               <div className="form-group">
                 <label>Role:</label>
-                <select
-                  name="role"
-                  value={formData.role}
-                  onChange={handleInputChange}
-                >
-                  <option value="Staff">Staff</option>
-                  <option value="Manager">Manager</option>
-                  <option value="Admin">Admin</option>
-                </select>
+                {currentUser?.role === "CEO" ? (
+                  <select
+                    name="role"
+                    value={formData.role}
+                    onChange={handleInputChange}
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Manager">Manager</option>
+                    <option value="CEO">CEO</option>
+                  </select>
+                ) : (
+                  <select
+                    name="role"
+                    value={"Admin"}
+                    onChange={() => {}}
+                    disabled
+                  >
+                    <option value="Admin">Admin</option>
+                  </select>
+                )}
               </div>
 
               <div className="form-group">
@@ -376,7 +396,7 @@ const AdminStaff = () => {
                     <p className="staff-phone">{staffMember.phone}</p>
                   )}
                 </div>
-                {canEditStaff() && (
+                {canEditStaff(staffMember.role) && (
                   <div className="staff-actions">
                     <button 
                       onClick={() => handleEdit(staffMember)}
@@ -392,10 +412,10 @@ const AdminStaff = () => {
                     </button>
                   </div>
                 )}
-                {!canEditStaff() && (
+                {!canEditStaff(staffMember.role) && (
                   <div className="staff-actions">
                     <div className="read-only-badge">
-                      Read Only
+                      No Access
                     </div>
                   </div>
                 )}
@@ -403,6 +423,16 @@ const AdminStaff = () => {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="staff-footer">
+        <button
+          type="button"
+          onClick={() => navigate('/admin/dashboard')}
+          className="back-dashboard-btn"
+        >
+          ← Back
+        </button>
       </div>
     </div>
   );

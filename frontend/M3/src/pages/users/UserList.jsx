@@ -6,6 +6,17 @@ const UserList = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [role, setRole] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("adminData");
+      const parsed = raw ? JSON.parse(raw) : null;
+      setRole(String(parsed?.role || ""));
+    } catch {
+      setRole("");
+    }
+  }, []);
 
   const getAuthHeaders = () => {
     try {
@@ -39,11 +50,8 @@ const UserList = () => {
     setLoading(true);
     setError("");
     const candidates = [
-      "/user/all",
-      "/users",
-      "/customer/all",
-      "/customers",
-      "/user",
+      "/admin/customers",
+      "/admin/users",
     ];
     try {
       let got = null;
@@ -68,7 +76,25 @@ const UserList = () => {
     }
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => {
+    if (role && role !== "CEO") return;
+    fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role]);
+
+  if (role && role !== "CEO") {
+    return (
+      <div className="page-container">
+        <div className="page-header">
+          <h2>Customers</h2>
+          <div className="actions">
+            <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
+          </div>
+        </div>
+        <div className="error">Access denied: only the CEO can view customer details.</div>
+      </div>
+    );
+  }
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div className="error">{error}</div>;
@@ -84,30 +110,26 @@ const UserList = () => {
       <table className="table">
         <thead>
           <tr>
-            <th>Avatar</th>
             <th>Name</th>
             <th>Email</th>
-            <th>Role</th>
-            <th>Status</th>
             <th>Phone</th>
+            <th>Total Orders</th>
+            <th>Total Spent</th>
+            <th>Last Order</th>
+            <th>Subscribed</th>
             <th>Joined</th>
           </tr>
         </thead>
         <tbody>
           {users.map((u, idx) => (
             <tr key={u?._id || idx}>
-              <td>
-                {u?.image ? (
-                  <img className="brand-thumb" src={u.image} alt={u?.name || "user"} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
-                ) : (
-                  <div className="brand-thumb" style={{ visibility: 'hidden' }} />
-                )}
-              </td>
               <td>{u?.name || "-"}</td>
               <td>{u?.email || "-"}</td>
-              <td>{u?.role || "user"}</td>
-              <td>{u?.status || "active"}</td>
-              <td>{u?.phone || u?.contact || "-"}</td>
+              <td>{u?.phoneNumber || u?.phone || u?.contact || "-"}</td>
+              <td>{u?.totalOrders ?? "-"}</td>
+              <td>{u?.totalSpent ?? "-"}</td>
+              <td>{u?.lastOrderDate ? new Date(u.lastOrderDate).toLocaleDateString() : "-"}</td>
+              <td>{typeof u?.isSubscribedToMarketing === 'boolean' ? (u.isSubscribedToMarketing ? 'Yes' : 'No') : '-'}</td>
               <td>{u?.createdAt ? new Date(u.createdAt).toLocaleDateString() : (u?.joiningDate ? new Date(u.joiningDate).toLocaleDateString() : "-")}</td>
             </tr>
           ))}

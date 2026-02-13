@@ -71,6 +71,8 @@ const ProductList = () => {
         <div className="actions">
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
           <button className="btn" onClick={() => (window.location.href = "/admin/products/new")}>+ Add New Product</button>
+          <button className="btn" onClick={() => (window.location.href = "/admin/clinical-products/new")}>+ Add Clinical Product</button>
+          <button className="btn" onClick={() => (window.location.href = "/admin/machines/new")}>+ Add Machine</button>
         </div>
       </div>
       <table className="table">
