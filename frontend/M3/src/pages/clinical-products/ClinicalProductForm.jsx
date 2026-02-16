@@ -483,7 +483,7 @@ const ClinicalProductForm = () => {
                   </button>
                 )}
               </div>
-              <div className="subtext">Choose images from Image Manager and URLs are auto-added.</div>
+              <div className="subtext">Choose images in Image Manager, then click Done to add the URLs.</div>
 
               {Array.isArray(item.imageURLs) && item.imageURLs.length > 0 && (
                 <div className="image-grid">
@@ -603,27 +603,33 @@ const ClinicalProductForm = () => {
 
             {imageManagerError && <div className="error" style={{ marginTop: 8 }}>{imageManagerError}</div>}
 
-            <div className="image-manager-grid">
-              {imageManagerImages.map((entry, idx) => (
-                <button
-                  key={`${entry.id}-${idx}`}
-                  type="button"
-                  className={`image-tile selectable ${!isSelectingMainImage && selectedImageUrls[entry.url] ? "selected" : ""}`}
-                  onClick={() => toggleImageSelection(entry.url)}
-                >
-                  <img src={entry.url} alt={entry.publicId || `manager-image-${idx + 1}`} />
-                  <span className="image-select-chip">{isSelectingMainImage ? "Set Main" : (selectedImageUrls[entry.url] ? "Selected" : "Select")}</span>
-                </button>
-              ))}
-              {!imageManagerLoading && !imageManagerImages.length && (
-                <div className="image-empty">No images found in image manager.</div>
-              )}
+            <div className="image-manager-modal-body">
+              <div className="image-manager-grid">
+                {imageManagerImages.map((entry, idx) => (
+                  <button
+                    key={`${entry.id}-${idx}`}
+                    type="button"
+                    className={`image-tile selectable ${!isSelectingMainImage && selectedImageUrls[entry.url] ? "selected" : ""}`}
+                    onClick={() => toggleImageSelection(entry.url)}
+                  >
+                    <img src={entry.url} alt={entry.publicId || `manager-image-${idx + 1}`} />
+                    <span className="image-select-chip">{isSelectingMainImage ? "Set Main" : (selectedImageUrls[entry.url] ? "Selected" : "Select")}</span>
+                  </button>
+                ))}
+                {!imageManagerLoading && !imageManagerImages.length && (
+                  <div className="image-empty">No images found in image manager.</div>
+                )}
+              </div>
             </div>
 
             {!isSelectingMainImage && (
-              <div className="actions" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+              <div className="image-manager-modal-footer">
                 <span className="subtext">{selectedImageCount} selected</span>
-                <button type="button" className="btn" onClick={addSelectedImages} disabled={!selectedImageCount}>Add Selected Images</button>
+                <button type="button" className="btn" onClick={addSelectedImages} disabled={!selectedImageCount}>
+                  {selectedImageCount
+                    ? (selectedImageCount === 1 ? "Done (1 image)" : `Done (${selectedImageCount} images)`)
+                    : "Done"}
+                </button>
               </div>
             )}
           </div>

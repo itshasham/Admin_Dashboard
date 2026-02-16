@@ -162,12 +162,32 @@
 .image-manager-modal-card {
   width: min(980px, 100%);
   max-height: calc(100vh - 40px);
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #fff;
   border-radius: 14px;
   border: 1px solid var(--border);
   padding: 16px;
   box-shadow: 0 20px 40px rgba(2, 6, 23, 0.22);
+}
+
+.image-manager-modal-body {
+  flex: 1;
+  overflow: auto;
+  padding-right: 2px; /* keep scrollbar from overlapping content */
+}
+
+.image-manager-modal-footer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.65), #fff 35%);
 }
 
 .image-manager-grid {
