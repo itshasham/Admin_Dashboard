@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import "../products/product.css";
 import { API_BASE_URL } from "../../config/api";
+import { parseApiError } from "../../utils/api-error";
 
 const emptyItem = {
   img: "",
@@ -81,6 +82,7 @@ const ClinicalProductForm = () => {
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [error, setError] = useState("");
+  const [validationIssues, setValidationIssues] = useState([]);
   const [imageManagerOpen, setImageManagerOpen] = useState(false);
   const [imageManagerTarget, setImageManagerTarget] = useState("additional");
   const [imageManagerLoading, setImageManagerLoading] = useState(false);
@@ -333,11 +335,14 @@ const ClinicalProductForm = () => {
     event.preventDefault();
     setSaving(true);
     setError("");
+    setValidationIssues([]);
 
     const errors = validate();
     if (errors.length) {
-      setError(errors.join(". "));
+      setError("Please fix the highlighted clinical product details before saving.");
+      setValidationIssues(errors);
       setSaving(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
@@ -394,11 +399,25 @@ const ClinicalProductForm = () => {
         data = await resp.json().catch(() => ({}));
       }
 
-      if (!resp.ok) throw new Error(data?.message || "Failed to save clinical product");
+      if (!resp.ok) {
+        const fallbackSummary =
+          resp.status === 401
+            ? "Your session has expired. Please log in again."
+            : resp.status === 403
+              ? "You do not have permission to add or edit clinical products."
+              : `Save failed (${resp.status}). Please review and try again.`;
+        const parsed = parseApiError(data, fallbackSummary);
+        setError(parsed.summary);
+        setValidationIssues(parsed.issues);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
 
       window.location.href = "/admin/clinical-products";
     } catch (err) {
       setError(err.message || "Failed to save clinical product");
+      setValidationIssues([]);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSaving(false);
     }
@@ -415,7 +434,18 @@ const ClinicalProductForm = () => {
       </div>
 
       {loading && <div>Loading...</div>}
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error-panel" role="alert" aria-live="polite">
+          <p className="error-panel-title">{error}</p>
+          {validationIssues.length > 0 && (
+            <ul className="error-panel-list">
+              {validationIssues.map((issue, index) => (
+                <li key={`${issue}-${index}`}>{issue}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {!loading && (
         <div className="product-form-shell">

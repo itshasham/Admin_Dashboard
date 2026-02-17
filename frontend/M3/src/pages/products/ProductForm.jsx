@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import "./product.css";
 import { API_BASE_URL } from '../../config/api';
+import { parseApiError } from "../../utils/api-error";
 
 const emptyProduct = {
   img: "",
@@ -62,6 +63,7 @@ const ProductForm = () => {
   const [offerEnd, setOfferEnd] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [validationIssues, setValidationIssues] = useState([]);
   const [brands, setBrands] = useState([]);
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [categories, setCategories] = useState([]);
@@ -81,14 +83,6 @@ const ProductForm = () => {
     } catch {
       return {};
     }
-  };
-
-  const todayYMD = () => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
   };
 
   const toYMD = (value) => {
@@ -302,7 +296,7 @@ const ProductForm = () => {
           unit: normalizedUnit,
           imageURLs: normalizeImageCollection(payload?.imageURLs),
         });
-        const start = toYMD(payload?.offerDate?.startDate) || todayYMD();
+        const start = toYMD(payload?.offerDate?.startDate) || "";
         const end = toYMD(payload?.offerDate?.endDate) || "";
         setOfferStart(start);
         setOfferEnd(end);
@@ -478,22 +472,6 @@ const ProductForm = () => {
   const selectedImageCount = Object.keys(selectedImageUrls).filter((url) => selectedImageUrls[url]).length;
   const isSelectingMainImage = imageManagerTarget === "main";
 
-  const extractValidationMessage = (data) => {
-    if (!data) return "Validation failed";
-    if (typeof data.message === "string" && data.message.trim()) return data.message;
-    if (data.errors && typeof data.errors === "object") {
-      const firstKey = Object.keys(data.errors)[0];
-      if (firstKey) {
-        const val = data.errors[firstKey];
-        if (Array.isArray(val) && val[0]) return `${firstKey}: ${val[0]}`;
-        if (typeof val === "string") return `${firstKey}: ${val}`;
-        if (val && typeof val.message === "string") return `${firstKey}: ${val.message}`;
-      }
-    }
-    if (Array.isArray(data.details) && data.details[0]?.message) return data.details[0].message;
-    return "Validation error. Please check your inputs.";
-  };
-
   const prune = (obj) => {
     if (obj == null || typeof obj !== "object") return obj;
     const out = Array.isArray(obj) ? [] : {};
@@ -531,11 +509,13 @@ const ProductForm = () => {
     e.preventDefault();
     setSaving(true);
     setError("");
+    setValidationIssues([]);
     
     // Validate required fields
-    const validationErrors = validateProduct();
-    if (validationErrors.length > 0) {
-      setError(validationErrors.join(". ") + ".");
+    const localValidationErrors = validateProduct();
+    if (localValidationErrors.length > 0) {
+      setError("Please fix the highlighted product details before saving.");
+      setValidationIssues(localValidationErrors);
       setSaving(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -591,13 +571,23 @@ const ProductForm = () => {
       const isJson = resp.headers.get("content-type")?.includes("application/json");
       const data = isJson ? await resp.json().catch(() => ({})) : {};
       if (!resp.ok) {
-        const msg = resp.status === 400 ? extractValidationMessage(data) : (data?.message || `Save failed (${resp.status})`);
         console.error("Product save error", { status: resp.status, data });
-        throw new Error(msg);
+        const fallbackSummary =
+          resp.status === 401
+            ? "Your session has expired. Please log in again."
+            : resp.status === 403
+              ? "You do not have permission to add or edit products."
+              : `Save failed (${resp.status}). Please review and try again.`;
+        const parsed = parseApiError(data, fallbackSummary);
+        setError(parsed.summary);
+        setValidationIssues(parsed.issues);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
       }
       window.location.href = "/admin/products";
     } catch (err) {
       setError(err.message || "Save failed");
+      setValidationIssues([]);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSaving(false);
@@ -613,7 +603,18 @@ const ProductForm = () => {
         </div>
         <button className="btn secondary" type="button" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
       </div>
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error-panel" role="alert" aria-live="polite">
+          <p className="error-panel-title">{error}</p>
+          {validationIssues.length > 0 && (
+            <ul className="error-panel-list">
+              {validationIssues.map((issue, index) => (
+                <li key={`${issue}-${index}`}>{issue}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <div className="product-form-shell">
         <div className="product-side">
           <div className="card product-preview-card">

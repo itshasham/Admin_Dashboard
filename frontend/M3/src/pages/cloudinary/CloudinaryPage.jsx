@@ -1,15 +1,120 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./cloudinary.css";
 import { API_BASE_URL } from '../../config/api';
+import { parseApiError } from "../../utils/api-error";
 
 const CloudinaryPage = () => {
   const [singleFile, setSingleFile] = useState(null);
   const [multiFiles, setMultiFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
+  const [errorTitle, setErrorTitle] = useState("");
+  const [errorDetails, setErrorDetails] = useState([]);
   const [images, setImages] = useState([]);
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("");
+
+  const clearError = () => {
+    setErrorTitle("");
+    setErrorDetails([]);
+  };
+
+  const setFriendlyError = (title, details = []) => {
+    setErrorTitle(String(title || "").trim() || "Something went wrong.");
+    setErrorDetails(Array.isArray(details) ? details.filter(Boolean) : []);
+  };
+
+  const clearAdminSessionAndGoLogin = () => {
+    try {
+      localStorage.removeItem("adminToken");
+      localStorage.removeItem("adminData");
+    } catch {
+      // ignore
+    }
+    window.location.href = "/admin/login";
+  };
+
+  const isNetworkFetchError = (err) =>
+    err &&
+    (err.name === "TypeError" || err instanceof TypeError) &&
+    /failed to fetch/i.test(String(err.message || ""));
+
+  const handleHttpError = (resp, data, fallbackSummary) => {
+    const status = Number(resp?.status || 0);
+
+    if (status === 401) {
+      setFriendlyError("You are not logged in (session expired).", [
+        "Please log in again and retry.",
+      ]);
+      clearAdminSessionAndGoLogin();
+      return;
+    }
+
+    if (status === 403) {
+      setFriendlyError("Access denied for Image Manager.", [
+        "Your account must be Admin, Manager, or CEO to manage images.",
+        "Ask your administrator to update your role.",
+      ]);
+      return;
+    }
+
+    if (status === 413) {
+      setFriendlyError("This file is too large to upload.", [
+        "Try a smaller image (recommended under 5 MB).",
+        "Use JPG/PNG/WebP and resize if needed.",
+      ]);
+      return;
+    }
+
+    if (status === 429) {
+      setFriendlyError("Too many requests.", [
+        "Please wait 30 seconds and try again.",
+      ]);
+      return;
+    }
+
+    const parsed = parseApiError(data, fallbackSummary);
+    const rawMsg = String(data?.message || data?.error || "").toLowerCase();
+    if (
+      status >= 500 &&
+      (rawMsg.includes("cloudinary") ||
+        rawMsg.includes("api_key") ||
+        rawMsg.includes("cloud_name") ||
+        rawMsg.includes("api secret"))
+    ) {
+      setFriendlyError("Image service is not configured on the server.", [
+        "This is a backend setup issue (Cloudinary keys).",
+        "Contact the developer to verify Cloudinary environment variables on the backend deployment.",
+      ]);
+      return;
+    }
+
+    setFriendlyError(parsed.summary, parsed.issues);
+  };
+
+  const validateImageFiles = (files, { maxCount = 1 } = {}) => {
+    const MAX_MB = 5;
+    const maxBytes = MAX_MB * 1024 * 1024;
+    const list = Array.from(files || []).slice(0, maxCount);
+    const problems = [];
+
+    if (list.length === 0) {
+      problems.push("Please choose an image file.");
+      return { ok: false, problems, files: [] };
+    }
+
+    list.forEach((file, idx) => {
+      if (!file) return;
+      const name = file.name || `file ${idx + 1}`;
+      if (!String(file.type || "").startsWith("image/")) {
+        problems.push(`${name}: Not an image file. Please select JPG/PNG/WebP.`);
+      }
+      if (Number(file.size || 0) > maxBytes) {
+        problems.push(`${name}: Too large. Please keep images under ${MAX_MB} MB.`);
+      }
+    });
+
+    return { ok: problems.length === 0, problems, files: list };
+  };
 
   const getAuthHeaders = () => {
     try {
@@ -31,17 +136,28 @@ const CloudinaryPage = () => {
   }, []);
 
   const fetchImages = async () => {
-    setError("");
+    clearError();
     try {
       const url = new URL(`${API_BASE_URL}/cloudinary/images`);
       if (query.trim()) url.searchParams.set("q", query.trim());
       const resp = await fetch(url.toString(), { headers: { ...getAuthHeaders() }, cache: "no-store" });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.message || data?.error || "Failed to load images");
+      if (!resp.ok) {
+        handleHttpError(resp, data, "Could not load images. Please try again.");
+        setImages([]);
+        return;
+      }
       const list = Array.isArray(data?.images) ? data.images : (Array.isArray(data?.data) ? data.data : []);
       setImages(list);
     } catch (err) {
-      setError(err.message || "Failed to load images");
+      if (isNetworkFetchError(err)) {
+        setFriendlyError("Cannot connect to the server.", [
+          "Check your internet connection and try Refresh.",
+          "If it still fails, the backend may be down or blocked by the browser/network.",
+        ]);
+      } else {
+        setFriendlyError(err.message || "Failed to load images");
+      }
       setImages([]);
     }
   };
@@ -50,21 +166,36 @@ const CloudinaryPage = () => {
 
   const handleSingleUpload = async (e) => {
     e.preventDefault();
-    if (!singleFile) return setError("Please choose an image");
-    setUploading(true); setError("");
+    const validation = validateImageFiles(singleFile ? [singleFile] : [], { maxCount: 1 });
+    if (!validation.ok) {
+      setFriendlyError("Cannot upload image.", validation.problems);
+      return;
+    }
+    setUploading(true);
+    clearError();
     try {
       const fd = new FormData();
-      fd.append("image", singleFile);
+      fd.append("image", validation.files[0]);
       const resp = await fetch(`${API_BASE_URL}/cloudinary/add-img`, { method: "POST", headers: { ...getAuthHeaders() }, body: fd });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.message || data?.error || "Upload failed");
+      if (!resp.ok) {
+        handleHttpError(resp, data, "Upload failed. Please try again.");
+        return;
+      }
       const img = data?.data || data; // { url, id }
       setImages((prev) => [img, ...prev]);
       setSingleFile(null);
       // Keep the list in sync (ensures _id is available for delete).
       await fetchImages();
     } catch (err) {
-      setError(err.message || "Upload failed");
+      if (isNetworkFetchError(err)) {
+        setFriendlyError("Upload failed because the server could not be reached.", [
+          "Check your internet connection.",
+          "Try again in a few seconds.",
+        ]);
+      } else {
+        setFriendlyError(err.message || "Upload failed");
+      }
     } finally {
       setUploading(false);
     }
@@ -72,20 +203,35 @@ const CloudinaryPage = () => {
 
   const handleMultipleUpload = async (e) => {
     e.preventDefault();
-    if (!multiFiles || multiFiles.length === 0) return setError("Please choose up to 5 images");
-    setUploading(true); setError("");
+    const validation = validateImageFiles(multiFiles || [], { maxCount: 5 });
+    if (!validation.ok) {
+      setFriendlyError("Cannot upload images.", validation.problems);
+      return;
+    }
+    setUploading(true);
+    clearError();
     try {
       const fd = new FormData();
-      Array.from(multiFiles).slice(0, 5).forEach((f) => fd.append("images", f));
+      validation.files.forEach((f) => fd.append("images", f));
       const resp = await fetch(`${API_BASE_URL}/cloudinary/add-multiple-img`, { method: "POST", headers: { ...getAuthHeaders() }, body: fd });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.message || data?.error || "Upload failed");
+      if (!resp.ok) {
+        handleHttpError(resp, data, "Upload failed. Please try again.");
+        return;
+      }
       const list = data?.data || [];
       setImages((prev) => [...list, ...prev]);
       setMultiFiles([]);
       await fetchImages();
     } catch (err) {
-      setError(err.message || "Upload failed");
+      if (isNetworkFetchError(err)) {
+        setFriendlyError("Upload failed because the server could not be reached.", [
+          "Check your internet connection.",
+          "Try again in a few seconds.",
+        ]);
+      } else {
+        setFriendlyError(err.message || "Upload failed");
+      }
     } finally {
       setUploading(false);
     }
@@ -113,15 +259,25 @@ const CloudinaryPage = () => {
     const idOrPublic = img?._id || img?.publicId;
     if (!idOrPublic) return;
     if (!window.confirm("Delete this image?")) return;
-    setUploading(true); setError("");
+    setUploading(true);
+    clearError();
     try {
       const safeId = encodeURIComponent(String(idOrPublic));
       const resp = await fetch(`${API_BASE_URL}/cloudinary/images/${safeId}`, { method: "DELETE", headers: { ...getAuthHeaders() } });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.message || data?.error || "Delete failed");
+      if (!resp.ok) {
+        handleHttpError(resp, data, "Delete failed. Please try again.");
+        return;
+      }
       setImages((prev) => prev.filter((im) => (im?._id || im?.publicId) !== idOrPublic));
     } catch (err) {
-      setError(err.message || "Delete failed");
+      if (isNetworkFetchError(err)) {
+        setFriendlyError("Delete failed because the server could not be reached.", [
+          "Check your internet connection and try again.",
+        ]);
+      } else {
+        setFriendlyError(err.message || "Delete failed");
+      }
     } finally {
       setUploading(false);
     }
@@ -156,7 +312,18 @@ const CloudinaryPage = () => {
         </div>
       </div>
 
-      {error && <div className="error">{error}</div>}
+      {errorTitle && (
+        <div className="error-panel" role="alert" aria-live="polite">
+          <p className="error-panel-title">{errorTitle}</p>
+          {errorDetails.length > 0 && (
+            <ul className="error-panel-list">
+              {errorDetails.map((line, idx) => (
+                <li key={`${line}-${idx}`}>{line}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="grid two-col gap-16">
         <div className="card">
