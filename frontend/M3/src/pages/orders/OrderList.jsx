@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./order.css";
-import { API_BASE_URL } from '../../config/api';
+import { API_BASE_URL } from "../../config/api";
+
+const STATUS_OPTIONS = ["all", "pending", "processing", "dispatch", "cancel"];
 
 const OrderList = () => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -31,81 +35,41 @@ const OrderList = () => {
     setLoading(true);
     setError("");
     try {
-      console.log("Fetching orders from:", `${API_BASE_URL}/order/orders`);
-      const resp = await fetch(`${API_BASE_URL}/order/orders`, { headers: { ...getAuthHeaders() }, cache: "no-store" });
-      
-      console.log("Orders API Response Status:", resp.status, resp.statusText);
-      
+      const resp = await fetch(`${API_BASE_URL}/order/orders`, {
+        headers: { ...getAuthHeaders() },
+        cache: "no-store"
+      });
+
       const isJson = resp.headers.get("content-type")?.includes("application/json");
       const data = isJson ? await resp.json().catch(() => null) : null;
-      
-      console.log("Orders API Response Data:", data);
-      
       if (!resp.ok) throw new Error(data?.message || "Failed to load orders");
-      
-      const ordersArray = pickArray(data);
-      console.log("Processed Orders Array:", ordersArray);
-      console.log("Order IDs:", ordersArray.map(o => ({ id: o?._id, invoice: o?.invoice, hasId: !!o?._id })));
-      
-      setOrders(ordersArray);
+
+      setOrders(pickArray(data));
     } catch (err) {
-      console.error("Failed to load orders:", err);
+      setOrders([]);
       setError(err.message || "Failed to load orders");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchOrders(); }, []);
+  useEffect(() => {
+    fetchOrders();
+  }, []);
 
   const normalizeStatus = (status) => {
     const value = String(status || "").toLowerCase();
     if (value === "cancelled" || value === "canceled") return "cancel";
     if (value === "delivered" || value === "dispatched") return "dispatch";
-    return value;
+    return value || "pending";
   };
 
-  const filteredOrders = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return orders.filter((order) => {
-      const statusValue = normalizeStatus(order?.status);
-      if (statusFilter !== "all" && statusValue !== statusFilter) return false;
-      if (!needle) return true;
-      const haystack = [
-        order?.invoice,
-        order?.name,
-        order?.user,
-        order?.email,
-        order?.paymentMethod,
-        order?.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(needle);
-    });
-  }, [orders, query, statusFilter]);
-
-  const stats = useMemo(() => {
-    const counts = { pending: 0, processing: 0, dispatch: 0, cancel: 0 };
-    let revenue = 0;
-    orders.forEach((order) => {
-      const statusValue = normalizeStatus(order?.status);
-      if (counts[statusValue] !== undefined) counts[statusValue] += 1;
-      const amount = Number(order?.totalAmount);
-      if (!Number.isNaN(amount)) revenue += amount;
-    });
-    return { counts, revenue };
-  }, [orders]);
-
-  const formatAmount = (value) => {
-    const amount = Number(value);
-    if (Number.isNaN(amount)) return "-";
-    return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(amount);
-  };
-
-  const formatDate = (value) => {
-    try { return value ? new Date(value).toLocaleDateString() : "-"; } catch { return "-"; }
+  const statusLabel = (status) => {
+    const normalized = normalizeStatus(status);
+    if (normalized === "dispatch") return "Dispatch";
+    if (normalized === "processing") return "Processing";
+    if (normalized === "cancel") return "Cancel";
+    return "Pending";
   };
 
   const statusClass = (status) => {
@@ -117,23 +81,100 @@ const OrderList = () => {
     return "status-badge status-neutral";
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div className="error">{error}</div>;
+  const getOrderTimestamp = (order) => {
+    const raw = order?.createdAt || order?.updatedAt;
+    const ts = Date.parse(raw);
+    return Number.isFinite(ts) ? ts : 0;
+  };
+
+  const filteredOrders = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return orders
+      .filter((order) => {
+        const currentStatus = normalizeStatus(order?.status);
+        if (statusFilter !== "all" && currentStatus !== statusFilter) return false;
+        if (!needle) return true;
+
+        const haystack = [
+          order?.invoice,
+          order?.name,
+          order?.user?.name,
+          order?.user?.email,
+          order?.user,
+          order?.email,
+          order?.paymentMethod,
+          order?.status
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return haystack.includes(needle);
+      })
+      .sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a));
+  }, [orders, query, statusFilter]);
+
+  const stats = useMemo(() => {
+    const counts = { pending: 0, processing: 0, dispatch: 0, cancel: 0 };
+    let revenue = 0;
+
+    orders.forEach((order) => {
+      const currentStatus = normalizeStatus(order?.status);
+      if (counts[currentStatus] !== undefined) counts[currentStatus] += 1;
+
+      const amount = Number(order?.totalAmount);
+      if (Number.isFinite(amount)) revenue += amount;
+    });
+
+    return { counts, revenue };
+  }, [orders]);
+
+  const visibleCounts = useMemo(
+    () => ({
+      all: orders.length,
+      pending: stats.counts.pending,
+      processing: stats.counts.processing,
+      dispatch: stats.counts.dispatch,
+      cancel: stats.counts.cancel
+    }),
+    [orders.length, stats.counts]
+  );
+
+  const formatAmount = (value) => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return "-";
+    return new Intl.NumberFormat("en-US", {
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const formatDate = (value) => {
+    try {
+      return value ? new Date(value).toLocaleDateString() : "-";
+    } catch {
+      return "-";
+    }
+  };
 
   return (
-    <div className="page-container">
-      <div className="page-header fancy">
-        <div>
+    <div className="page-container orders-page">
+      <div className="page-header fancy orders-header">
+        <div className="orders-header-copy">
+          <p className="orders-eyebrow">Operations</p>
           <h2>Orders</h2>
-          <p className="muted">Track fulfillment, payment, and customer details in one place</p>
+          <p className="muted">Track fulfillment, payment, and customer details in one place.</p>
         </div>
-        <div className="actions">
-          <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
-          <button className="btn" onClick={fetchOrders}>Refresh</button>
+        <div className="actions orders-header-actions">
+          <button className="btn secondary" type="button" onClick={() => navigate("/admin/dashboard")}>
+            ← Back
+          </button>
+          <button className="btn" type="button" onClick={fetchOrders} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
         </div>
       </div>
 
-      <div className="summary-grid">
+      <div className="summary-grid orders-summary-grid">
         <div className="summary-card">
           <span className="summary-label">Total Orders</span>
           <span className="summary-value">{orders.length}</span>
@@ -156,68 +197,130 @@ const OrderList = () => {
         </div>
       </div>
 
-      <div className="table-toolbar">
-        <div className="search-input">
+      <div className="table-toolbar orders-toolbar">
+        <div className="search-input orders-search-input">
           <input
             type="search"
             placeholder="Search by invoice, customer, email, or status"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-        </div>
-        <div className="pill-row">
-          {["all", "pending", "processing", "dispatch", "cancel"].map((status) => (
+          {query && (
             <button
-              key={status}
-              className={`filter-pill ${statusFilter === status ? "active" : ""}`}
-              onClick={() => setStatusFilter(status)}
+              type="button"
+              className="orders-clear-btn"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
             >
-              {status}
+              Clear
             </button>
-          ))}
+          )}
+        </div>
+
+        <div className="orders-filter-wrap">
+          <span className="orders-visible-note">
+            Showing {filteredOrders.length} of {orders.length}
+          </span>
+          <div className="pill-row">
+            {STATUS_OPTIONS.map((status) => (
+              <button
+                type="button"
+                key={status}
+                className={`filter-pill ${statusFilter === status ? "active" : ""}`}
+                onClick={() => setStatusFilter(status)}
+              >
+                {status}
+                <span className="pill-count">{visibleCounts[status]}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="card table-card">
-        <div className="table-responsive">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Invoice</th>
-                <th>Customer</th>
-                <th>Payment</th>
-                <th>Date</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredOrders.map((o, idx) => (
-                <tr key={o?._id || idx}>
-                  <td>{o?.invoice || "-"}</td>
-                  <td>{o?.name || o?.user || o?.email || "-"}</td>
-                  <td>{o?.paymentMethod || "-"}</td>
-                  <td>{formatDate(o?.createdAt)}</td>
-                  <td>{formatAmount(o?.totalAmount)}</td>
-                  <td><span className={statusClass(o?.status)}>{normalizeStatus(o?.status) || "pending"}</span></td>
-                  <td>
-                    <div className="actions">
-                      {o?._id ? (
-                        <button className="btn" onClick={() => (window.location.href = `/admin/orders/${o._id}`)}>View</button>
+      <div className="card table-card orders-table-wrap">
+        {error && (
+          <div className="error-panel orders-error-panel">
+            <p className="error-panel-title">{error}</p>
+          </div>
+        )}
+
+        {!loading && !error && filteredOrders.length === 0 && (
+          <div className="empty-state orders-empty-state">
+            <p>No orders match your filters.</p>
+            {(query || statusFilter !== "all") && (
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setStatusFilter("all");
+                }}
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {loading && (
+          <div className="empty-state orders-empty-state">
+            <p>Loading orders...</p>
+          </div>
+        )}
+
+        {!loading && !error && filteredOrders.length > 0 && (
+          <div className="table-responsive">
+            <table className="table orders-table">
+              <thead>
+                <tr>
+                  <th>Invoice</th>
+                  <th>Customer</th>
+                  <th>Payment</th>
+                  <th>Date</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOrders.map((order, index) => (
+                  <tr key={order?._id || index}>
+                    <td>
+                      <span className="invoice-pill">{order?.invoice || "-"}</span>
+                    </td>
+                    <td>
+                      <div className="order-customer-cell">
+                        <strong>{order?.name || order?.user?.name || order?.user || "Unknown"}</strong>
+                        <span>{order?.email || order?.user?.email || "No email"}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="payment-text">{String(order?.paymentMethod || "-").toUpperCase()}</span>
+                    </td>
+                    <td>{formatDate(order?.createdAt || order?.updatedAt)}</td>
+                    <td>
+                      <span className="amount-pill">{formatAmount(order?.totalAmount)}</span>
+                    </td>
+                    <td>
+                      <span className={statusClass(order?.status)}>{statusLabel(order?.status)}</span>
+                    </td>
+                    <td>
+                      {order?._id ? (
+                        <button
+                          className="btn order-view-btn"
+                          type="button"
+                          onClick={() => navigate(`/admin/orders/${order._id}`)}
+                        >
+                          View
+                        </button>
                       ) : (
                         <span className="subtext">No ID</span>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {!filteredOrders.length && (
-          <div className="empty-state">
-            <p>No orders match your filters.</p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

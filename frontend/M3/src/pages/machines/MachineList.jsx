@@ -75,7 +75,6 @@ const MachineList = () => {
         <div className="actions">
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
           <button className="btn" onClick={() => (window.location.href = "/admin/machines/new")}>+ Add Machine</button>
-          <button className="btn secondary" onClick={() => (window.location.href = "/admin/clinical-products")}>View Clinical Products</button>
         </div>
       </div>
 
@@ -89,8 +88,10 @@ const MachineList = () => {
               <th>Image</th>
               <th>Name</th>
               <th>Model</th>
+              <th>Brand</th>
               <th>Availability</th>
               <th>Contact</th>
+              <th>Product URL</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -105,6 +106,7 @@ const MachineList = () => {
                   </td>
                   <td>{machine?.name || "-"}</td>
                   <td>{machine?.modelNumber || "-"}</td>
+                  <td>{machine?.brand || "-"}</td>
                   <td>{machine?.availability || "-"}</td>
                   <td>
                     <div style={{ display: "grid", gap: 3 }}>
@@ -113,8 +115,22 @@ const MachineList = () => {
                     </div>
                   </td>
                   <td>
+                    {machine?.productUrl ? (
+                      <a href={machine.productUrl} target="_blank" rel="noreferrer">Open Link</a>
+                    ) : (
+                      <small className="muted">No URL</small>
+                    )}
+                  </td>
+                  <td>
                     <div className="actions">
                       <button className="btn" disabled={!id} onClick={() => (window.location.href = `/admin/machines/${id}`)}>Edit</button>
+                      <button
+                        className="btn secondary"
+                        disabled={!machine?.productUrl}
+                        onClick={() => window.open(machine.productUrl, "_blank", "noopener,noreferrer")}
+                      >
+                        Visit
+                      </button>
                       <button className="btn danger" disabled={!id} onClick={() => handleDelete(id)}>Delete</button>
                     </div>
                   </td>
@@ -123,7 +139,7 @@ const MachineList = () => {
             })}
             {!machines.length && (
               <tr>
-                <td colSpan={6} className="muted">No machines found.</td>
+                <td colSpan={8} className="muted">No machines found.</td>
               </tr>
             )}
           </tbody>

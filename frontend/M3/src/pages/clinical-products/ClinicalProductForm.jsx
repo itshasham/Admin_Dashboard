@@ -25,6 +25,24 @@ const emptyItem = {
   professionalUseOnly: true,
 };
 
+const CLINICAL_CATEGORY_OPTIONS = [
+  { id: "111111111111111111111111", name: "Filler" },
+  { id: "222222222222222222222222", name: "Booster" },
+  { id: "333333333333333333333333", name: "Premium Products" },
+  { id: "444444444444444444444444", name: "Thread" },
+];
+
+const normalizeClinicalCategory = (entry) => {
+  const categoryId = String(entry?.id || "").trim();
+  const categoryName = String(entry?.name || "").trim().toLowerCase();
+
+  return (
+    CLINICAL_CATEGORY_OPTIONS.find(
+      (option) => option.id === categoryId || option.name.toLowerCase() === categoryName
+    ) || null
+  );
+};
+
 const pickArray = (payload) => {
   if (!payload) return [];
   if (Array.isArray(payload)) return payload;
@@ -76,11 +94,9 @@ const ClinicalProductForm = () => {
 
   const [item, setItem] = useState(emptyItem);
   const [brands, setBrands] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingBrands, setLoadingBrands] = useState(false);
-  const [loadingCategories, setLoadingCategories] = useState(false);
   const [error, setError] = useState("");
   const [validationIssues, setValidationIssues] = useState([]);
   const [imageManagerOpen, setImageManagerOpen] = useState(false);
@@ -137,23 +153,6 @@ const ClinicalProductForm = () => {
     }
   };
 
-  const fetchCategories = async () => {
-    setLoadingCategories(true);
-    try {
-      const resp = await fetch(`${API_BASE_URL}/category/all`, {
-        headers: { ...getAuthHeaders() },
-        cache: "no-store",
-      });
-      const data = await resp.json().catch(() => null);
-      if (!resp.ok) throw new Error(data?.message || "Failed to load categories");
-      setCategories(pickArray(data));
-    } catch {
-      setCategories([]);
-    } finally {
-      setLoadingCategories(false);
-    }
-  };
-
   const fetchItem = async () => {
     if (!isEdit) return;
     setLoading(true);
@@ -176,11 +175,15 @@ const ClinicalProductForm = () => {
       if (!resp.ok) throw new Error(data?.message || "Failed to load clinical product");
 
       const payload = data?.data || data;
+      const normalizedCategory = normalizeClinicalCategory(payload?.category);
+
       setItem({
         ...emptyItem,
         ...payload,
         brand: payload?.brand || { name: "", id: "" },
-        category: payload?.category || { name: "", id: "" },
+        category: normalizedCategory || { name: "", id: "" },
+        parent: "Clinical",
+        children: normalizedCategory?.name || "",
         imageURLs: normalizeImageCollection(payload?.imageURLs),
       });
     } catch (err) {
@@ -228,7 +231,6 @@ const ClinicalProductForm = () => {
 
   useEffect(() => {
     fetchBrands();
-    fetchCategories();
     fetchItem();
   }, [id]);
 
@@ -246,10 +248,9 @@ const ClinicalProductForm = () => {
     setItem((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectRef = (event, node) => {
+  const handleBrandSelect = (event) => {
     const selectedId = event.target.value;
-    const source = node === "brand" ? brands : categories;
-    const selected = source.find((entry) => (entry._id || entry.id || entry.uuid) === selectedId);
+    const selected = brands.find((entry) => (entry._id || entry.id || entry.uuid) === selectedId);
 
     const nextNode = selected
       ? {
@@ -258,7 +259,24 @@ const ClinicalProductForm = () => {
         }
       : { id: "", name: "" };
 
-    setItem((prev) => ({ ...prev, [node]: nextNode }));
+    setItem((prev) => ({ ...prev, brand: nextNode }));
+  };
+
+  const handleClinicalCategorySelect = (event) => {
+    const selectedId = event.target.value;
+    const selected = CLINICAL_CATEGORY_OPTIONS.find((entry) => entry.id === selectedId);
+
+    if (!selected) {
+      setItem((prev) => ({ ...prev, category: { id: "", name: "" }, children: "" }));
+      return;
+    }
+
+    setItem((prev) => ({
+      ...prev,
+      category: { id: selected.id, name: selected.name },
+      children: selected.name,
+      parent: "Clinical",
+    }));
   };
 
   const removeImage = (index) => {
@@ -318,11 +336,12 @@ const ClinicalProductForm = () => {
 
     if (!item.img?.trim()) errors.push("Main image URL is required");
     if (!item.title?.trim()) errors.push("Title is required");
-    if (!item.parent?.trim()) errors.push("Parent is required");
-    if (!item.children?.trim()) errors.push("Children is required");
     if (!item.description?.trim()) errors.push("Description is required");
     if (!item.brand?.id || !item.brand?.name) errors.push("Brand is required");
     if (!item.category?.id || !item.category?.name) errors.push("Category is required");
+    if (!normalizeClinicalCategory(item.category)) {
+      errors.push("Category must be one of Filler, Booster, Premium Products, or Thread");
+    }
 
     if (!item.contactEmail && !item.whatsappNumber) {
       errors.push("Provide at least one contact method (Email or WhatsApp)");
@@ -353,8 +372,8 @@ const ClinicalProductForm = () => {
     const payload = {
       img: item.img,
       title: item.title,
-      parent: item.parent,
-      children: item.children,
+      parent: "Clinical",
+      children: String(item.children || item.category?.name || "").trim(),
       unit: String(item.unit || "").trim() || "n/a",
       price: Number.isFinite(price) ? price : 0,
       discount: Number.isFinite(discount) ? discount : 0,
@@ -540,8 +559,8 @@ const ClinicalProductForm = () => {
                 </div>
                 <div className="form-table">
                   <div className="form-row"><div className="form-cell">Title *</div><div className="form-cell"><input name="title" value={item.title} onChange={handleChange} required /></div></div>
-                  <div className="form-row"><div className="form-cell">Parent *</div><div className="form-cell"><input name="parent" value={item.parent} onChange={handleChange} required /></div></div>
-                  <div className="form-row"><div className="form-cell">Children *</div><div className="form-cell"><input name="children" value={item.children} onChange={handleChange} required /></div></div>
+                  <div className="form-row"><div className="form-cell">Parent</div><div className="form-cell"><input name="parent" value={item.parent} readOnly /></div></div>
+                  <div className="form-row"><div className="form-cell">Sub Category</div><div className="form-cell"><input name="children" value={item.children} readOnly placeholder="Select category below" /></div></div>
                   <div className="form-row"><div className="form-cell">Description *</div><div className="form-cell"><textarea name="description" rows={5} value={item.description} onChange={handleChange} required /></div></div>
                 </div>
               </div>
@@ -549,13 +568,13 @@ const ClinicalProductForm = () => {
               <div className="section appear delay-2" style={{ gridColumn: "1 / -1" }}>
                 <div className="section-title">
                   <h3>Brand & Category</h3>
-                  <span className="hint">Map the product to its catalog references</span>
+                  <span className="hint">Clinical categories are separate from B2C categories</span>
                 </div>
                 <div className="form-table">
                   <div className="form-row">
                     <div className="form-cell">Brand *</div>
                     <div className="form-cell">
-                      <select value={item.brand.id || ""} onChange={(event) => handleSelectRef(event, "brand")} required disabled={loadingBrands}>
+                      <select value={item.brand.id || ""} onChange={handleBrandSelect} required disabled={loadingBrands}>
                         <option value="">-- Select brand --</option>
                         {brands.map((brand, idx) => {
                           const idKey = brand._id || brand.id || brand.uuid || `brand-${idx}`;
@@ -567,11 +586,10 @@ const ClinicalProductForm = () => {
                   <div className="form-row">
                     <div className="form-cell">Category *</div>
                     <div className="form-cell">
-                      <select value={item.category.id || ""} onChange={(event) => handleSelectRef(event, "category")} required disabled={loadingCategories}>
+                      <select value={item.category.id || ""} onChange={handleClinicalCategorySelect} required>
                         <option value="">-- Select category --</option>
-                        {categories.map((category, idx) => {
-                          const idKey = category._id || category.id || category.uuid || `category-${idx}`;
-                          return <option key={idKey} value={idKey}>{category.parent || category.name || category.title || `Category ${idx + 1}`}</option>;
+                        {CLINICAL_CATEGORY_OPTIONS.map((category) => {
+                          return <option key={category.id} value={category.id}>{category.name}</option>;
                         })}
                       </select>
                     </div>

@@ -404,6 +404,155 @@ body { margin: 0; background: #f7f3ee; }
   color: var(--muted);
 }
 
+/* Brands list page */
+.brands-page {
+  background:
+    radial-gradient(circle at 8% -13%, rgba(15, 118, 110, 0.17), transparent 39%),
+    radial-gradient(circle at 96% -16%, rgba(249, 115, 22, 0.16), transparent 43%),
+    linear-gradient(180deg, #f7f3ee 0%, #ffffff 56%);
+}
+
+.brands-header {
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.brands-header-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.brands-eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.brands-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.brands-toolbar {
+  margin-top: 14px;
+}
+
+.brands-search-input {
+  position: relative;
+}
+
+.brands-search-input input {
+  min-width: 320px;
+  padding-right: 80px;
+}
+
+.brands-clear-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pill-count {
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  letter-spacing: 0;
+  background: rgba(82, 97, 122, 0.16);
+  color: inherit;
+  font-weight: 800;
+}
+
+.filter-pill.active .pill-count {
+  background: rgba(248, 250, 252, 0.24);
+}
+
+.brands-table-wrap {
+  margin-top: 10px;
+  padding: 10px;
+}
+
+.brands-table {
+  min-width: 740px;
+}
+
+.brands-table th:nth-child(1) { width: 58%; }
+.brands-table th:nth-child(2) { width: 17%; }
+.brands-table th:nth-child(3) { width: 25%; }
+
+.brand-main-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brands-thumb {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+}
+
+.brands-thumb-fallback {
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #334155;
+  background: linear-gradient(145deg, #edf2f7, #dbe4ef);
+  border: 1px solid #d3dce8;
+}
+
+.brand-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.brand-meta strong {
+  font-size: 15px;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.brand-meta span {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.brand-row-actions .btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.brands-error-panel {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.brands-empty-state {
+  min-height: 190px;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+}
+
+.brands-empty-state p {
+  margin: 0;
+}
+
 /* Coupon preview */
 .coupon-preview-card {
   min-width: 210px;
@@ -527,6 +676,7 @@ body { margin: 0; background: #f7f3ee; }
   .coupon-form-shell { grid-template-columns: 1fr; }
   .coupon-form-grid { grid-template-columns: 1fr; }
   .schedule-grid { grid-template-columns: 1fr; }
+  .brands-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 900px) {
@@ -547,6 +697,10 @@ body { margin: 0; background: #f7f3ee; }
   .brand-thumb { width: 40px; height: 40px; }
   .coupon-form-shell { grid-template-columns: 1fr; }
   .time-row { grid-template-columns: 1fr; }
+  .brands-search-input input { min-width: 100%; width: 100%; }
+  .brands-table-wrap { padding: 8px; }
+  .brands-table { min-width: 680px; }
+  .brand-meta strong { font-size: 14px; }
 }
 
 @media (max-width: 480px) {

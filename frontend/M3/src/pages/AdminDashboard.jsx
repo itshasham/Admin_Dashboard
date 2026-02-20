@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import './AdminDashboard.css';
-import { API_BASE_URL } from '../config/api';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import "./AdminDashboard.css";
+import { API_BASE_URL } from "../config/api";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toISODate = (d) => {
@@ -35,7 +35,6 @@ const buildTicks = (max, ticks = 5) => {
   for (let v = 0; v <= top + 0.0001; v += step) out.push(v);
   return out;
 };
-
 const buildLast7Days = () => {
   const today = new Date();
   const series = [];
@@ -48,91 +47,77 @@ const buildLast7Days = () => {
 };
 
 const SalesChart = ({ data }) => {
-  // Responsive SVG via viewBox.
-  const W = 560, H = 240;
-  const M = { l: 54, r: 14, t: 18, b: 46 };
+  const W = 560;
+  const H = 240;
+  const M = { l: 54, r: 14, t: 16, b: 46 };
   const innerW = W - M.l - M.r;
   const innerH = H - M.t - M.b;
 
   const max = Math.max(...data.map((d) => Number(d.total) || 0), 0);
   const ticks = max === 0 ? [0, 250, 500, 750, 1000] : buildTicks(max, 4);
-  const top = max === 0 ? 1000 : (ticks[ticks.length - 1] || 1);
-
+  const top = max === 0 ? 1000 : ticks[ticks.length - 1] || 1;
   const xFor = (i) => M.l + (data.length <= 1 ? innerW / 2 : (i * innerW) / (data.length - 1));
   const yFor = (v) => M.t + innerH - (Math.max(0, Number(v) || 0) / (top || 1)) * innerH;
 
   const lineD = data
     .map((d, i) => `${i === 0 ? "M" : "L"} ${xFor(i).toFixed(2)} ${yFor(d.total).toFixed(2)}`)
     .join(" ");
-
-  const areaD = `M ${xFor(0).toFixed(2)} ${yFor(0).toFixed(2)} ` +
+  const areaD =
+    `M ${xFor(0).toFixed(2)} ${yFor(0).toFixed(2)} ` +
     data.map((d, i) => `L ${xFor(i).toFixed(2)} ${yFor(d.total).toFixed(2)}`).join(" ") +
     ` L ${xFor(data.length - 1).toFixed(2)} ${yFor(0).toFixed(2)} Z`;
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "240px", display: "block" }}>
       <defs>
-        <linearGradient id="salesFill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="rgba(15,118,110,0.35)" />
-          <stop offset="1" stopColor="rgba(15,118,110,0.02)" />
+        <linearGradient id="salesAuraFill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="rgba(188, 144, 95, 0.35)" />
+          <stop offset="1" stopColor="rgba(188, 144, 95, 0.02)" />
         </linearGradient>
       </defs>
 
-      {/* Grid + Y ticks */}
       {ticks.map((t) => {
         const y = yFor(t);
         return (
           <g key={t}>
-            <line x1={M.l} x2={W - M.r} y1={y} y2={y} stroke="#e2e8f0" strokeWidth="1" />
-            <text x={M.l - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#52617a">
+            <line x1={M.l} x2={W - M.r} y1={y} y2={y} stroke="rgba(93, 78, 67, 0.16)" strokeWidth="1" />
+            <text x={M.l - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#6f5d50">
               {formatCompact(t)}
             </text>
           </g>
         );
       })}
 
-      {/* Axes */}
-      <line x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} stroke="#94a3b8" strokeWidth="1" />
-      <line x1={M.l} x2={W - M.r} y1={H - M.b} y2={H - M.b} stroke="#94a3b8" strokeWidth="1" />
+      <line x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} stroke="rgba(93, 78, 67, 0.36)" strokeWidth="1" />
+      <line x1={M.l} x2={W - M.r} y1={H - M.b} y2={H - M.b} stroke="rgba(93, 78, 67, 0.36)" strokeWidth="1" />
 
-      {/* Series */}
-      <path d={areaD} fill="url(#salesFill)" />
-      <path d={lineD} fill="none" stroke="#0f766e" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+      <path d={areaD} fill="url(#salesAuraFill)" />
+      <path d={lineD} fill="none" stroke="#bc905f" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
       {data.map((d, i) => (
-        <circle key={i} cx={xFor(i)} cy={yFor(d.total)} r="4" fill="#0f766e" stroke="#ffffff" strokeWidth="2">
+        <circle key={i} cx={xFor(i)} cy={yFor(d.total)} r="4" fill="#bc905f" stroke="#fff8f1" strokeWidth="2">
           <title>{`${d.label}: ${Number(d.total) || 0}`}</title>
         </circle>
       ))}
 
-      {/* X labels */}
       {data.map((d, i) => (
-        <text
-          key={i}
-          x={xFor(i)}
-          y={H - M.b + 18}
-          textAnchor="middle"
-          fontSize="11"
-          fill="#52617a"
-        >
+        <text key={i} x={xFor(i)} y={H - M.b + 18} textAnchor="middle" fontSize="11" fill="#6f5d50">
           {d.label}
         </text>
       ))}
-
-      <text x={M.l} y={H - 10} fontSize="11" fill="#52617a">Date (MM-DD)</text>
-      <text x={14} y={M.t + 10} fontSize="11" fill="#52617a">Sales</text>
     </svg>
   );
 };
 
 const CategoryChart = ({ data }) => {
-  const W = 560, H = 240;
-  const M = { l: 54, r: 14, t: 18, b: 64 };
+  const W = 560;
+  const H = 240;
+  const M = { l: 54, r: 14, t: 16, b: 64 };
   const innerW = W - M.l - M.r;
   const innerH = H - M.t - M.b;
 
   const max = Math.max(...data.map((d) => Number(d.count) || 0), 0);
   const ticks = max === 0 ? [0, 1, 2, 3, 4, 5] : buildTicks(max, 4);
-  const top = max === 0 ? 5 : (ticks[ticks.length - 1] || 1);
+  const top = max === 0 ? 5 : ticks[ticks.length - 1] || 1;
 
   const n = Math.max(1, data.length);
   const gap = 10;
@@ -142,36 +127,33 @@ const CategoryChart = ({ data }) => {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "240px", display: "block" }}>
-      {/* Grid + Y ticks */}
       {ticks.map((t) => {
         const y = yFor(t);
         return (
           <g key={t}>
-            <line x1={M.l} x2={W - M.r} y1={y} y2={y} stroke="#e2e8f0" strokeWidth="1" />
-            <text x={M.l - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#52617a">
+            <line x1={M.l} x2={W - M.r} y1={y} y2={y} stroke="rgba(93, 78, 67, 0.16)" strokeWidth="1" />
+            <text x={M.l - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#6f5d50">
               {formatCompact(t)}
             </text>
           </g>
         );
       })}
 
-      {/* Axes */}
-      <line x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} stroke="#94a3b8" strokeWidth="1" />
-      <line x1={M.l} x2={W - M.r} y1={H - M.b} y2={H - M.b} stroke="#94a3b8" strokeWidth="1" />
+      <line x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} stroke="rgba(93, 78, 67, 0.36)" strokeWidth="1" />
+      <line x1={M.l} x2={W - M.r} y1={H - M.b} y2={H - M.b} stroke="rgba(93, 78, 67, 0.36)" strokeWidth="1" />
 
-      {/* Bars */}
       {data.map((c, i) => {
         const v = Number(c.count) || 0;
         const x = xFor(i);
         const y = yFor(v);
-        const h = (H - M.b) - y;
-        const label = String(c._id || "—");
+        const h = H - M.b - y;
+        const label = String(c._id || "Untitled");
         return (
           <g key={i}>
-            <rect x={x} y={y} width={barW} height={Math.max(2, h)} rx="6" fill="#f97316">
+            <rect x={x} y={y} width={barW} height={Math.max(2, h)} rx="6" fill="#8f7965">
               <title>{`${label}: ${v}`}</title>
             </rect>
-            <text x={x + barW / 2} y={y - 6} textAnchor="middle" fontSize="11" fill="#0f172a">
+            <text x={x + barW / 2} y={y - 6} textAnchor="middle" fontSize="11" fill="#4a3f36">
               {v}
             </text>
             <text
@@ -179,17 +161,14 @@ const CategoryChart = ({ data }) => {
               y={H - M.b + 18}
               textAnchor="end"
               fontSize="11"
-              fill="#52617a"
+              fill="#6f5d50"
               transform={`rotate(-35 ${x + barW / 2} ${H - M.b + 18})`}
             >
-              {label.length > 14 ? `${label.slice(0, 14)}…` : label}
+              {label.length > 14 ? `${label.slice(0, 14)}...` : label}
             </text>
           </g>
         );
       })}
-
-      <text x={M.l} y={H - 10} fontSize="11" fill="#52617a">Category</text>
-      <text x={14} y={M.t + 10} fontSize="11" fill="#52617a">Qty</text>
     </svg>
   );
 };
@@ -197,9 +176,8 @@ const CategoryChart = ({ data }) => {
 const AdminDashboard = () => {
   const [adminData, setAdminData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
-  // dashboard data
   const [amounts, setAmounts] = useState({
     todayOrderAmount: 0,
     yesterdayOrderAmount: 0,
@@ -210,15 +188,15 @@ const AdminDashboard = () => {
     yesterDayCardPaymentAmount: 0,
     yesterDayCashPaymentAmount: 0,
   });
-  const [salesReport, setSalesReport] = useState(buildLast7Days()); // [{ date, total, order }]
-  const [categoryData, setCategoryData] = useState([]); // [{ _id, count }]
+  const [salesReport, setSalesReport] = useState(buildLast7Days());
+  const [categoryData, setCategoryData] = useState([]);
   const [recentOrders, setRecentOrders] = useState({ orders: [], totalOrder: 0 });
 
   const navigate = useNavigate();
 
   const getAuthHeaders = () => {
     try {
-      const token = localStorage.getItem('adminToken');
+      const token = localStorage.getItem("adminToken");
       return token ? { Authorization: `Bearer ${token}` } : {};
     } catch {
       return {};
@@ -226,19 +204,19 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('adminToken');
-    const storedAdminData = localStorage.getItem('adminData');
+    const token = localStorage.getItem("adminToken");
+    const storedAdminData = localStorage.getItem("adminData");
 
     if (!token) {
-      navigate('/admin/login');
+      navigate("/admin/login");
       return;
     }
 
     if (storedAdminData) {
       try {
         setAdminData(JSON.parse(storedAdminData));
-      } catch (error) {
-        console.error('Error parsing admin data:', error);
+      } catch {
+        setAdminData(null);
       }
     }
 
@@ -246,42 +224,41 @@ const AdminDashboard = () => {
   }, [navigate]);
 
   const handleLogout = () => {
-    localStorage.removeItem('adminToken');
-    localStorage.removeItem('adminData');
-    navigate('/admin/login');
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminData");
+    navigate("/admin/login");
   };
 
-  const navigateTo = (path) => {
-    navigate(path);
-  };
-
-  const canAccessStaffManagement = () => {
-    if (!adminData) return false;
-    return ['Manager', 'CEO'].includes(adminData.role);
-  };
-
+  const navigateTo = (path) => navigate(path);
+  const canAccessStaffManagement = () => ["Manager", "CEO"].includes(adminData?.role);
   const canViewCustomers = () => adminData?.role === "CEO";
 
-  // Fetch user-order dashboard data
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        // amounts
+        const getOrderTimestamp = (order) => {
+          const raw = order?.createdAt || order?.updatedAt;
+          const ts = Date.parse(raw);
+          return Number.isFinite(ts) ? ts : 0;
+        };
+
         const aResp = await fetch(`${API_BASE_URL}/user-order/dashboard-amount`, {
           headers: { ...getAuthHeaders() },
-          cache: 'no-store',
+          cache: "no-store",
         });
-        const aJson = (aResp.headers.get('content-type') || '').includes('application/json') ? await aResp.json() : {};
+        const aJson = (aResp.headers.get("content-type") || "").includes("application/json")
+          ? await aResp.json()
+          : {};
         if (aResp.ok && aJson) setAmounts((prev) => ({ ...prev, ...aJson }));
 
-        // sales report (last 7 days)
         const sResp = await fetch(`${API_BASE_URL}/user-order/sales-report`, {
           headers: { ...getAuthHeaders() },
-          cache: 'no-store',
+          cache: "no-store",
         });
-        const sJson = (sResp.headers.get('content-type') || '').includes('application/json') ? await sResp.json() : {};
+        const sJson = (sResp.headers.get("content-type") || "").includes("application/json")
+          ? await sResp.json()
+          : {};
         if (sResp.ok && Array.isArray(sJson?.salesReport)) {
-          // Always show last 7 days on X axis (including 0s for missing days).
           const map = new Map((sJson.salesReport || []).map((r) => [String(r?.date || ""), r]));
           const today = new Date();
           const series = [];
@@ -291,7 +268,7 @@ const AdminDashboard = () => {
             const row = map.get(iso);
             series.push({
               date: iso,
-              label: iso.slice(5), // MM-DD
+              label: iso.slice(5),
               total: Number(row?.total) || 0,
               order: Number(row?.order) || 0,
             });
@@ -299,45 +276,60 @@ const AdminDashboard = () => {
           setSalesReport(series);
         }
 
-        // most selling categories
         const cResp = await fetch(`${API_BASE_URL}/user-order/most-selling-category`, {
           headers: { ...getAuthHeaders() },
-          cache: 'no-store',
+          cache: "no-store",
         });
-        const cJson = (cResp.headers.get('content-type') || '').includes('application/json') ? await cResp.json() : {};
+        const cJson = (cResp.headers.get("content-type") || "").includes("application/json")
+          ? await cResp.json()
+          : {};
         if (cResp.ok && Array.isArray(cJson?.categoryData)) setCategoryData(cJson.categoryData);
 
-        // recent orders
         const rUrl = new URL(`${API_BASE_URL}/user-order/dashboard-recent-order`);
-        rUrl.searchParams.set('page', '1');
-        rUrl.searchParams.set('limit', '8');
+        rUrl.searchParams.set("page", "1");
+        rUrl.searchParams.set("limit", "8");
         const rResp = await fetch(rUrl.toString(), {
           headers: { ...getAuthHeaders() },
-          cache: 'no-store',
+          cache: "no-store",
         });
-        const rJson = (rResp.headers.get('content-type') || '').includes('application/json') ? await rResp.json() : {};
-        if (rResp.ok && Array.isArray(rJson?.orders)) setRecentOrders({ orders: rJson.orders, totalOrder: rJson.totalOrder || rJson.orders.length });
-      } catch (e) {
-        setError('Failed to load dashboard metrics');
+        const rJson = (rResp.headers.get("content-type") || "").includes("application/json")
+          ? await rResp.json()
+          : {};
+        if (rResp.ok && Array.isArray(rJson?.orders)) {
+          const sorted = [...rJson.orders].sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a));
+          setRecentOrders({ orders: sorted, totalOrder: rJson.totalOrder || sorted.length });
+        }
+      } catch {
+        setError("Failed to load dashboard metrics");
       }
     };
     fetchDashboard();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const maxSales = Math.max(...salesReport.map((s) => Number(s.total) || 0), 1);
-  const maxCat = Math.max(...categoryData.map((c) => Number(c.count) || 0), 1);
   const formatAmount = (value) => {
     const amount = Number(value);
     if (Number.isNaN(amount)) return "0";
     return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(amount);
   };
-  const toPercent = (part, total) => {
-    if (total <= 0) return 50;
+  const formatCurrency = (value) => {
+    const amount = Number(value) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+  const percent = (part, total) => {
+    if (total <= 0) return 0;
     return Math.round((part / total) * 100);
   };
+  const segmentWidth = (part, total) => (total > 0 ? `${percent(part, total)}%` : "50%");
   const todayTotalPayment = Number(amounts.todayCardPaymentAmount || 0) + Number(amounts.todayCashPaymentAmount || 0);
   const yesterdayTotalPayment = Number(amounts.yesterDayCardPaymentAmount || 0) + Number(amounts.yesterDayCashPaymentAmount || 0);
+  const orderDelta = Number(amounts.todayOrderAmount || 0) - Number(amounts.yesterdayOrderAmount || 0);
+  const orderDeltaPercent = Number(amounts.yesterdayOrderAmount || 0) > 0
+    ? ((orderDelta / Number(amounts.yesterdayOrderAmount || 1)) * 100).toFixed(1)
+    : null;
   const statusTone = (status = "") => {
     const value = String(status).toLowerCase();
     if (value === "dispatch" || value === "delivered" || value === "dispatched") return "success";
@@ -346,116 +338,169 @@ const AdminDashboard = () => {
     return "warn";
   };
   const fmtDate = (value) => {
-    try { return value ? new Date(value).toLocaleDateString() : "-"; } catch { return value || "-"; }
+    try {
+      return value ? new Date(value).toLocaleDateString() : "-";
+    } catch {
+      return value || "-";
+    }
   };
+  const navItems = [
+    { label: "Dashboard", hint: "Overview", path: "/admin/dashboard", show: true, active: true },
+    { label: "Staff Management", hint: "Roles", path: "/admin/staff", show: canAccessStaffManagement() },
+    { label: "Customers", hint: "Accounts", path: "/admin/users", show: canViewCustomers() },
+    { label: "Products", hint: "Catalog", path: "/admin/products", show: true },
+    { label: "Clinical Products", hint: "Treatments", path: "/admin/clinical-products", show: true },
+    { label: "Machines", hint: "Devices", path: "/admin/machines", show: true },
+    { label: "Orders", hint: "Fulfillment", path: "/admin/orders", show: true },
+    { label: "Contact Us", hint: "Leads", path: "/admin/contact-us", show: true },
+    { label: "Brands", hint: "Portfolio", path: "/admin/brands", show: true },
+    { label: "Categories", hint: "Structure", path: "/admin/categories", show: true },
+    { label: "Coupons", hint: "Promotions", path: "/admin/coupons", show: true },
+    { label: "Image Manager", hint: "Assets", path: "/admin/cloudinary", show: true },
+  ];
 
   if (loading) {
     return (
       <div className="admin-dashboard">
-        <div className="loading">Loading...</div>
+        <div className="loading-shell">
+          <div className="loading-dot" />
+          <p>Loading your command center...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="admin-dashboard">
-      <header className="admin-header">
-        <div className="admin-header-content">
-          <h1>Admin Dashboard</h1>
-          <div className="admin-info">
-            <span>Welcome, {adminData?.name || 'Admin'}</span>
-            <span className="user-role-badge">Role: {adminData?.role || 'Unknown'}</span>
+      <header className="aura-header">
+        <div className="aura-header-inner">
+          <div>
+            <p className="aura-eyebrow">Admin Operations</p>
+            <h1>Commerce Control Room</h1>
+          </div>
+          <div className="aura-header-actions">
+            <div className="aura-admin-chip">
+              <strong>{adminData?.name || "Admin"}</strong>
+              <span>{adminData?.role || "Unknown role"}</span>
+            </div>
             <button onClick={handleLogout} className="logout-btn">Logout</button>
           </div>
         </div>
       </header>
 
-      <main className="admin-main">
-        <div className="admin-sidebar">
-          <nav className="admin-nav">
-            <button onClick={() => navigateTo('/admin/dashboard')} className="nav-item active">Dashboard</button>
-            {canAccessStaffManagement() && (
-              <button onClick={() => navigateTo('/admin/staff')} className="nav-item">Staff Management</button>
-            )}
-            {canViewCustomers() && (
-              <button onClick={() => navigateTo('/admin/users')} className="nav-item">Customers</button>
-            )}
-            <button onClick={() => navigateTo('/admin/products')} className="nav-item">Products</button>
-            <button onClick={() => navigateTo('/admin/clinical-products')} className="nav-item">Clinical Products</button>
-            <button onClick={() => navigateTo('/admin/machines')} className="nav-item">Machines</button>
-            <button onClick={() => navigateTo('/admin/orders')} className="nav-item">Orders</button>
-            <button onClick={() => navigateTo('/admin/brands')} className="nav-item">Brands</button>
-            <button onClick={() => navigateTo('/admin/categories')} className="nav-item">Categories</button>
-            <button onClick={() => navigateTo('/admin/coupons')} className="nav-item">Coupons</button>
-            <button onClick={() => navigateTo('/admin/cloudinary')} className="nav-item">Image Manager</button>
-            <button onClick={() => navigateTo('/admin/settings')} className="nav-item">Settings</button>
+      <main className="aura-shell">
+        <aside className="aura-sidebar glass-panel">
+          <p className="aura-kicker">Navigation</p>
+          <nav className="aura-nav">
+            {navItems.filter((item) => item.show).map((item) => (
+              <button
+                key={item.path}
+                onClick={() => navigateTo(item.path)}
+                className={`aura-nav-item${item.active ? " active" : ""}`}
+              >
+                <span>{item.label}</span>
+                <small>{item.hint}</small>
+              </button>
+            ))}
           </nav>
-        </div>
+        </aside>
 
-        <div className="admin-content">
-          {error && <div className="error" style={{ marginBottom: 12 }}>{error}</div>}
+        <section className="aura-content">
+          {error && <div className="error-banner">{error}</div>}
 
-          <div className="dashboard-stats">
-            <div className="stat-card">
-              <h3>Today Order Amount</h3>
-              <p className="stat-number">{formatAmount(amounts.todayOrderAmount)}</p>
+          <section className="aura-hero glass-panel">
+            <div className="aura-hero-copy">
+              <p className="aura-kicker">Daily Pulse</p>
+              <h2>
+                {orderDelta >= 0 ? "Momentum is climbing" : "Momentum is soft today"}
+              </h2>
+              <p>
+                Track sales, payment mix, and fulfillment health in one premium operations view.
+              </p>
+              <div className="hero-chip-row">
+                <span>{recentOrders.totalOrder} recent orders tracked</span>
+                <span>{categoryData.length} top categories visible</span>
+                <span>{new Date().toLocaleString()}</span>
+              </div>
             </div>
-            <div className="stat-card">
-              <h3>Yesterday Order Amount</h3>
-              <p className="stat-number">{formatAmount(amounts.yesterdayOrderAmount)}</p>
+            <div className="aura-hero-aside">
+              <p>Today vs Yesterday</p>
+              <h3>{orderDelta >= 0 ? "+" : ""}{formatCurrency(orderDelta)}</h3>
+              <strong>
+                {orderDeltaPercent === null
+                  ? "No baseline from yesterday"
+                  : `${orderDelta >= 0 ? "+" : ""}${orderDeltaPercent}% change`}
+              </strong>
+              <div className="hero-actions">
+                <button onClick={() => navigateTo("/admin/orders")} className="action-btn primary">Review Orders</button>
+                <button onClick={() => navigateTo("/admin/products/new")} className="action-btn">Add Product</button>
+              </div>
             </div>
-            <div className="stat-card">
-              <h3>Monthly Order Amount</h3>
-              <p className="stat-number">{formatAmount(amounts.monthlyOrderAmount)}</p>
-            </div>
-            <div className="stat-card">
-              <h3>Total Order Amount</h3>
-              <p className="stat-number">{formatAmount(amounts.totalOrderAmount)}</p>
-            </div>
-          </div>
+          </section>
 
-          <div className="insight-grid">
-            <div className="card split-card">
+          <section className="dashboard-stats">
+            <article className="stat-card glass-panel">
+              <h3>Today Revenue</h3>
+              <p className="stat-number">{formatCurrency(amounts.todayOrderAmount)}</p>
+            </article>
+            <article className="stat-card glass-panel">
+              <h3>Yesterday Revenue</h3>
+              <p className="stat-number">{formatCurrency(amounts.yesterdayOrderAmount)}</p>
+            </article>
+            <article className="stat-card glass-panel">
+              <h3>Monthly Revenue</h3>
+              <p className="stat-number">{formatCurrency(amounts.monthlyOrderAmount)}</p>
+            </article>
+            <article className="stat-card glass-panel">
+              <h3>Total Revenue</h3>
+              <p className="stat-number">{formatCurrency(amounts.totalOrderAmount)}</p>
+            </article>
+          </section>
+
+          <section className="insight-grid">
+            <article className="card split-card glass-panel">
               <div className="card-header">
                 <h2>Today Payment Mix</h2>
-                <span className="meta-pill">{formatAmount(todayTotalPayment)} total</span>
+                <span className="meta-pill">{formatCurrency(todayTotalPayment)}</span>
               </div>
               <div className="split-bar">
-                <div className="split-fill" style={{ width: `${toPercent(amounts.todayCardPaymentAmount, todayTotalPayment)}%` }}>
+                <div className="split-fill card-segment" style={{ width: segmentWidth(amounts.todayCardPaymentAmount, todayTotalPayment) }}>
                   <span>Card</span>
-                  <strong>{formatAmount(amounts.todayCardPaymentAmount)}</strong>
+                  <strong>{percent(amounts.todayCardPaymentAmount, todayTotalPayment)}%</strong>
                 </div>
-                <div className="split-fill cash" style={{ width: `${toPercent(amounts.todayCashPaymentAmount, todayTotalPayment)}%` }}>
+                <div className="split-fill cash-segment" style={{ width: segmentWidth(amounts.todayCashPaymentAmount, todayTotalPayment) }}>
                   <span>Cash</span>
-                  <strong>{formatAmount(amounts.todayCashPaymentAmount)}</strong>
+                  <strong>{percent(amounts.todayCashPaymentAmount, todayTotalPayment)}%</strong>
                 </div>
               </div>
-            </div>
-            <div className="card split-card">
+            </article>
+
+            <article className="card split-card glass-panel">
               <div className="card-header">
                 <h2>Yesterday Payment Mix</h2>
-                <span className="meta-pill">{formatAmount(yesterdayTotalPayment)} total</span>
+                <span className="meta-pill">{formatCurrency(yesterdayTotalPayment)}</span>
               </div>
               <div className="split-bar">
-                <div className="split-fill" style={{ width: `${toPercent(amounts.yesterDayCardPaymentAmount, yesterdayTotalPayment)}%` }}>
+                <div className="split-fill card-segment" style={{ width: segmentWidth(amounts.yesterDayCardPaymentAmount, yesterdayTotalPayment) }}>
                   <span>Card</span>
-                  <strong>{formatAmount(amounts.yesterDayCardPaymentAmount)}</strong>
+                  <strong>{percent(amounts.yesterDayCardPaymentAmount, yesterdayTotalPayment)}%</strong>
                 </div>
-                <div className="split-fill cash" style={{ width: `${toPercent(amounts.yesterDayCashPaymentAmount, yesterdayTotalPayment)}%` }}>
+                <div className="split-fill cash-segment" style={{ width: segmentWidth(amounts.yesterDayCashPaymentAmount, yesterdayTotalPayment) }}>
                   <span>Cash</span>
-                  <strong>{formatAmount(amounts.yesterDayCashPaymentAmount)}</strong>
+                  <strong>{percent(amounts.yesterDayCashPaymentAmount, yesterdayTotalPayment)}%</strong>
                 </div>
               </div>
-            </div>
-            <div className="card snapshot-card">
+            </article>
+
+            <article className="card snapshot-card glass-panel">
               <div className="card-header">
                 <h2>Order Snapshot</h2>
-                <span className="meta-pill">{recentOrders.totalOrder} recent orders</span>
+                <span className="meta-pill">{recentOrders.totalOrder} recent</span>
               </div>
               <div className="snapshot-grid">
                 <div>
-                  <span>Avg Order</span>
-                  <strong>{formatAmount(recentOrders.totalOrder ? amounts.totalOrderAmount / recentOrders.totalOrder : 0)}</strong>
+                  <span>Avg Ticket</span>
+                  <strong>{formatCurrency(recentOrders.totalOrder ? amounts.totalOrderAmount / recentOrders.totalOrder : 0)}</strong>
                 </div>
                 <div>
                   <span>Today Orders</span>
@@ -465,24 +510,37 @@ const AdminDashboard = () => {
                   <span>Monthly Orders</span>
                   <strong>{formatAmount(amounts.monthlyOrderAmount)}</strong>
                 </div>
+                <div>
+                  <span>Processing Queue</span>
+                  <strong>{recentOrders.orders.filter((o) => String(o.status || "").toLowerCase() === "processing").length}</strong>
+                </div>
               </div>
-            </div>
-          </div>
+            </article>
+          </section>
 
-          <div className="grid-two">
-            <div className="card chart-card">
-              <div className="card-header"><h2>Last 7 Days Sales</h2></div>
+          <section className="grid-two">
+            <article className="card chart-card glass-panel">
+              <div className="card-header">
+                <h2>Last 7 Days Sales</h2>
+                <span className="meta-pill">Daily trend</span>
+              </div>
               <SalesChart data={salesReport} />
-            </div>
+            </article>
 
-            <div className="card chart-card">
-              <div className="card-header"><h2>Top Categories</h2></div>
+            <article className="card chart-card glass-panel">
+              <div className="card-header">
+                <h2>Top Categories</h2>
+                <span className="meta-pill">Demand mix</span>
+              </div>
               <CategoryChart data={categoryData} />
-            </div>
-          </div>
+            </article>
+          </section>
 
-          <div className="card" style={{ marginTop: 16 }}>
-            <div className="card-header"><h2>Recent Orders</h2></div>
+          <section className="card glass-panel orders-card">
+            <div className="card-header">
+              <h2>Recent Orders</h2>
+              <span className="meta-pill">{recentOrders.orders.length} rows</span>
+            </div>
             <div className="table-responsive">
               <table className="table">
                 <thead>
@@ -504,16 +562,28 @@ const AdminDashboard = () => {
                       <td>{o.paymentMethod}</td>
                       <td>{o.name}</td>
                       <td>{o.user?.name || o.user?.email || o.user?._id || o.user || "-"}</td>
-                      <td>{formatAmount(o.totalAmount)}</td>
+                      <td>{formatCurrency(o.totalAmount)}</td>
                       <td><span className={`status-pill status-${statusTone(o.status)}`}>{o.status || "pending"}</span></td>
                     </tr>
                   ))}
+                  {recentOrders.orders.length === 0 && (
+                    <tr>
+                      <td colSpan="7" className="empty-row">No recent orders available.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
+          </section>
+        </section>
       </main>
+
+      <nav className="mobile-dock">
+        <button onClick={() => navigateTo("/admin/dashboard")} className="active">Dashboard</button>
+        <button onClick={() => navigateTo("/admin/orders")}>Orders</button>
+        <button onClick={() => navigateTo("/admin/products")}>Products</button>
+        <button onClick={() => navigateTo("/admin/contact-us")}>Contacts</button>
+      </nav>
     </div>
   );
 };

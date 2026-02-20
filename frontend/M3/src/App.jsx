@@ -31,6 +31,7 @@ const CouponList = lazy(() => import("./pages/coupons/CouponList"));
 const CouponForm = lazy(() => import("./pages/coupons/CouponForm"));
 
 const CloudinaryPage = lazy(() => import("./pages/cloudinary/CloudinaryPage"));
+const ContactUsList = lazy(() => import("./pages/contacts/ContactUsList"));
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -101,6 +102,7 @@ const App = () => {
 
           {/* Cloudinary (protected) */}
           <Route path="/admin/cloudinary" element={<ProtectedRoute><CloudinaryPage /></ProtectedRoute>} />
+          <Route path="/admin/contact-us" element={<ProtectedRoute><ContactUsList /></ProtectedRoute>} />
           
           {/* Redirect route for email links */}
           <Route path="/forget-password/:token" element={<RedirectToResetPassword />} />

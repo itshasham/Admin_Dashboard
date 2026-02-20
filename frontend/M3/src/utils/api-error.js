@@ -21,6 +21,12 @@ const FRIENDLY_FIELD_LABELS = {
   professionalUseOnly: "Professional use only",
   "offerDate.startDate": "Offer start date",
   "offerDate.endDate": "Offer end date",
+  name: "Name",
+  modelNumber: "Model number",
+  brand: "Brand",
+  productUrl: "Product URL",
+  availability: "Availability",
+  images: "Images",
 };
 
 const toLabel = (path = "") => {
@@ -101,4 +107,3 @@ export const parseApiError = (payload, fallbackSummary = "Please review the form
 
   return { summary, issues: normalizedIssues };
 };
-

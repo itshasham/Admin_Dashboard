@@ -16,10 +16,18 @@ const emptyProduct = {
   brand: { name: "", id: "" },
   category: { name: "", id: "" },
   status: "in-stock",
+  feature: false,
+  featured: false,
   productType: "",
   description: "",
   imageURLs: [],
 };
+
+const normalizeRef = (value) => ({
+  name: String(value?.name || "").trim(),
+  id: String(value?.id || "").trim(),
+});
+const normalizeType = (value) => String(value || "").trim().toLowerCase();
 
 const pickCloudinaryArray = (payload) => {
   if (!payload || typeof payload !== "object") return [];
@@ -264,15 +272,18 @@ const ProductForm = () => {
       };
       
       const categoriesArray = pickArray(data);
+      const b2cCategories = categoriesArray.filter(
+        (category) => normalizeType(category?.productType) === "beauty"
+      );
       
-      console.log("Final categories array:", categoriesArray);
-      console.log("Number of categories:", categoriesArray.length);
+      console.log("Final categories array:", b2cCategories);
+      console.log("Number of categories:", b2cCategories.length);
       
-      if (categoriesArray.length > 0) {
-        console.log("First category example:", categoriesArray[0]);
+      if (b2cCategories.length > 0) {
+        console.log("First category example:", b2cCategories[0]);
       }
       
-      setCategories(Array.isArray(categoriesArray) ? categoriesArray : []);
+      setCategories(Array.isArray(b2cCategories) ? b2cCategories : []);
     } catch (err) {
       console.error("Failed to load categories:", err);
       setCategories([]);
@@ -293,6 +304,10 @@ const ProductForm = () => {
         setProduct({
           ...emptyProduct,
           ...payload,
+          brand: normalizeRef(payload?.brand),
+          category: normalizeRef(payload?.category),
+          feature: Boolean(payload?.feature ?? payload?.featured ?? false),
+          featured: Boolean(payload?.feature ?? payload?.featured ?? false),
           unit: normalizedUnit,
           imageURLs: normalizeImageCollection(payload?.imageURLs),
         });
@@ -351,17 +366,28 @@ const ProductForm = () => {
   }, [imageManagerOpen]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     if (name === "unit") {
       setProduct((prev) => ({ ...prev, unit: digitsOnly(value) }));
       return;
     }
-    setProduct((prev) => ({ ...prev, [name]: value }));
+    if (name === "feature" || name === "featured") {
+      const nextFeature = type === "checkbox" ? checked : Boolean(value);
+      setProduct((prev) => ({ ...prev, feature: nextFeature, featured: nextFeature }));
+      return;
+    }
+    setProduct((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
   };
 
   const handleNestedChange = (e, root) => {
     const { name, value } = e.target;
-    setProduct((prev) => ({ ...prev, [root]: { ...prev[root], [name]: value } }));
+    setProduct((prev) => ({
+      ...prev,
+      [root]: {
+        ...(prev[root] && typeof prev[root] === "object" ? prev[root] : {}),
+        [name]: value,
+      },
+    }));
   };
 
   const handleBrandSelect = (e) => {
@@ -537,6 +563,8 @@ const ProductForm = () => {
         brand: { name: product.brand?.name || "", id: product.brand?.id || "" },
         category: { name: product.category?.name || "", id: product.category?.id || "" },
         status: product.status,
+        feature: Boolean(product.feature),
+        featured: Boolean(product.feature),
         productType: product.productType,
         description: product.description,
         imageURLs: normalizeImageCollection(product.imageURLs),
@@ -645,11 +673,11 @@ const ProductForm = () => {
               </div>
               <div className="product-preview-row">
                 <span>Brand</span>
-                <strong>{product.brand.name || "Unassigned"}</strong>
+                <strong>{product.brand?.name || "Unassigned"}</strong>
               </div>
               <div className="product-preview-row">
                 <span>Category</span>
-                <strong>{product.category.name || "Unassigned"}</strong>
+                <strong>{product.category?.name || "Unassigned"}</strong>
               </div>
             </div>
           </div>
@@ -773,6 +801,21 @@ const ProductForm = () => {
                     </div>
                   </div>
                 </div>
+                <div className="form-row">
+                  <div className="form-cell">Featured Product</div>
+                  <div className="form-cell">
+                    <label className="inline-switch" htmlFor="feature-toggle">
+                      <input
+                        id="feature-toggle"
+                        name="feature"
+                        type="checkbox"
+                        checked={Boolean(product.feature)}
+                        onChange={handleChange}
+                      />
+                      <span>{product.feature ? "Yes - show on featured listings" : "No - keep hidden from featured listings"}</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -812,7 +855,7 @@ const ProductForm = () => {
                     )}
                   </div>
                 </div>
-                {product.brand.name && (
+                {product.brand?.name && (
                   <div className="form-row">
                     <div className="form-cell">Selected Brand</div>
                     <div className="form-cell">
@@ -852,7 +895,7 @@ const ProductForm = () => {
                     )}
                   </div>
                 </div>
-                {product.category.name && (
+                {product.category?.name && (
                   <div className="form-row">
                     <div className="form-cell">Selected Category</div>
                     <div className="form-cell">
