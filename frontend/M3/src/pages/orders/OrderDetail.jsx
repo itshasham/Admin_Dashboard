@@ -78,14 +78,41 @@ const OrderDetail = () => {
     setLoading(true);
     setError("");
     try {
-      const resp = await fetch(`${API_BASE_URL}/admin/orders/${id}`, { headers: { ...getAuthHeaders() }, cache: "no-store" });
-      const isJson = resp.headers.get("content-type")?.includes("application/json");
-      const data = isJson ? await resp.json().catch(() => null) : null;
-      
-      if (!resp.ok) {
+      const endpoints = [
+        `${API_BASE_URL}/order/${id}`,
+        `${API_BASE_URL}/order/orders/${id}`,
+        `${API_BASE_URL}/admin/orders/${id}`,
+      ];
+
+      let data = null;
+      let loaded = false;
+      let lastError = null;
+
+      for (const endpoint of endpoints) {
+        const resp = await fetch(endpoint, {
+          headers: { ...getAuthHeaders() },
+          cache: "no-store",
+        });
+        const isJson = resp.headers.get("content-type")?.includes("application/json");
+        const body = isJson ? await resp.json().catch(() => null) : null;
+
+        if (resp.ok) {
+          data = body;
+          loaded = true;
+          break;
+        }
+
+        if (resp.status === 404) {
+          lastError = body?.message || "Order not found";
+          continue;
+        }
         if (resp.status === 403) throw new Error("Forbidden");
         if (resp.status === 401) throw new Error("Unauthorized");
-        throw new Error(data?.message || "Failed to load order");
+        throw new Error(body?.message || "Failed to load order");
+      }
+
+      if (!loaded) {
+        throw new Error(lastError || "Order not found");
       }
       
       let ord = coerceOrder(data);
@@ -221,14 +248,36 @@ const OrderDetail = () => {
           : {}),
       };
 
-      const resp = await fetch(`${API_BASE_URL}/admin/orders/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify(body),
-      });
-      const isJson = resp.headers.get("content-type")?.includes("application/json");
-      const data = isJson ? await resp.json().catch(() => ({})) : {};
-      if (!resp.ok) throw new Error(data?.message || "Failed to update order");
+      const updateEndpoints = [
+        { url: `${API_BASE_URL}/order/update-status/${id}`, method: "PATCH" },
+        { url: `${API_BASE_URL}/admin/orders/${id}`, method: "PUT" },
+      ];
+
+      let updated = false;
+      let lastError = "Failed to update order";
+      for (const target of updateEndpoints) {
+        const resp = await fetch(target.url, {
+          method: target.method,
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          body: JSON.stringify(body),
+        });
+        const isJson = resp.headers.get("content-type")?.includes("application/json");
+        const data = isJson ? await resp.json().catch(() => ({})) : {};
+
+        if (resp.ok) {
+          updated = true;
+          break;
+        }
+
+        if (resp.status === 404) {
+          lastError = data?.message || "Order endpoint not found";
+          continue;
+        }
+
+        throw new Error(data?.message || "Failed to update order");
+      }
+
+      if (!updated) throw new Error(lastError);
       await fetchOrder();
     } catch (err) {
       alert(err.message || "Failed to update order");
