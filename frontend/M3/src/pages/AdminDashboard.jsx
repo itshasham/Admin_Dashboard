@@ -191,6 +191,11 @@ const AdminDashboard = () => {
   const [salesReport, setSalesReport] = useState(buildLast7Days());
   const [categoryData, setCategoryData] = useState([]);
   const [recentOrders, setRecentOrders] = useState({ orders: [], totalOrder: 0 });
+  const [orderCounts, setOrderCounts] = useState({
+    today: 0,
+    monthly: 0,
+    processing: 0,
+  });
 
   const navigate = useNavigate();
 
@@ -236,69 +241,149 @@ const AdminDashboard = () => {
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
+        const pickOrders = (payload) => {
+          if (!payload) return [];
+          if (Array.isArray(payload)) return payload;
+          if (Array.isArray(payload?.data)) return payload.data;
+          if (Array.isArray(payload?.orders)) return payload.orders;
+          return [];
+        };
+        const toAmount = (value) => {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : 0;
+        };
+        const parseDate = (value) => {
+          const parsed = Date.parse(value);
+          return Number.isFinite(parsed) ? parsed : null;
+        };
         const getOrderTimestamp = (order) => {
           const raw = order?.createdAt || order?.updatedAt;
-          const ts = Date.parse(raw);
-          return Number.isFinite(ts) ? ts : 0;
+          return parseDate(raw) || 0;
         };
-
-        const aResp = await fetch(`${API_BASE_URL}/user-order/dashboard-amount`, {
+        const ordersResp = await fetch(`${API_BASE_URL}/order/orders`, {
           headers: { ...getAuthHeaders() },
           cache: "no-store",
         });
-        const aJson = (aResp.headers.get("content-type") || "").includes("application/json")
-          ? await aResp.json()
+        const ordersJson = (ordersResp.headers.get("content-type") || "").includes("application/json")
+          ? await ordersResp.json()
           : {};
-        if (aResp.ok && aJson) setAmounts((prev) => ({ ...prev, ...aJson }));
+        if (!ordersResp.ok) throw new Error(ordersJson?.message || "Failed to load orders");
 
-        const sResp = await fetch(`${API_BASE_URL}/user-order/sales-report`, {
-          headers: { ...getAuthHeaders() },
-          cache: "no-store",
-        });
-        const sJson = (sResp.headers.get("content-type") || "").includes("application/json")
-          ? await sResp.json()
-          : {};
-        if (sResp.ok && Array.isArray(sJson?.salesReport)) {
-          const map = new Map((sJson.salesReport || []).map((r) => [String(r?.date || ""), r]));
-          const today = new Date();
-          const series = [];
-          for (let i = 6; i >= 0; i--) {
-            const d = addDays(today, -i);
-            const iso = toISODate(d);
-            const row = map.get(iso);
-            series.push({
-              date: iso,
-              label: iso.slice(5),
-              total: Number(row?.total) || 0,
-              order: Number(row?.order) || 0,
-            });
+        const orders = pickOrders(ordersJson).sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a));
+        const now = new Date();
+        const todayStart = new Date(now);
+        todayStart.setHours(0, 0, 0, 0);
+        const tomorrowStart = new Date(todayStart);
+        tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+        const yesterdayStart = new Date(todayStart);
+        yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        let todayOrderAmount = 0;
+        let yesterdayOrderAmount = 0;
+        let monthlyOrderAmount = 0;
+        let totalOrderAmount = 0;
+        let todayCardPaymentAmount = 0;
+        let todayCashPaymentAmount = 0;
+        let yesterDayCardPaymentAmount = 0;
+        let yesterDayCashPaymentAmount = 0;
+        let todayCount = 0;
+        let monthlyCount = 0;
+        let processingCount = 0;
+
+        const salesMap = new Map(buildLast7Days().map((entry) => [
+          entry.date,
+          { ...entry, total: 0, order: 0 },
+        ]));
+        const categoryMap = new Map();
+
+        for (const order of orders) {
+          const total = toAmount(order?.totalAmount);
+          totalOrderAmount += total;
+
+          const createdTs = parseDate(order?.createdAt || order?.updatedAt);
+          const updatedDateIso = toISODate(order?.updatedAt || order?.createdAt || new Date());
+          const salesRow = salesMap.get(updatedDateIso);
+          if (salesRow) {
+            salesRow.total += total;
+            salesRow.order += 1;
           }
-          setSalesReport(series);
+
+          if (createdTs !== null) {
+            const createdAt = new Date(createdTs);
+            if (createdAt >= monthStart) {
+              monthlyOrderAmount += total;
+              monthlyCount += 1;
+            }
+            if (createdAt >= todayStart && createdAt < tomorrowStart) {
+              todayOrderAmount += total;
+              todayCount += 1;
+              const payment = String(order?.paymentMethod || "").toLowerCase();
+              if (payment.includes("cod") || payment.includes("cash")) {
+                todayCashPaymentAmount += total;
+              } else {
+                todayCardPaymentAmount += total;
+              }
+            } else if (createdAt >= yesterdayStart && createdAt < todayStart) {
+              yesterdayOrderAmount += total;
+              const payment = String(order?.paymentMethod || "").toLowerCase();
+              if (payment.includes("cod") || payment.includes("cash")) {
+                yesterDayCashPaymentAmount += total;
+              } else {
+                yesterDayCardPaymentAmount += total;
+              }
+            }
+          }
+
+          if (String(order?.status || "").toLowerCase() === "processing") {
+            processingCount += 1;
+          }
+
+          const cartItems = Array.isArray(order?.cart) ? order.cart : [];
+          cartItems.forEach((item) => {
+            const name =
+              String(
+                item?.productType ||
+                item?.category?.name ||
+                item?.category ||
+                item?.parent ||
+                "Other"
+              ).trim() || "Other";
+            const qty = toAmount(item?.orderQuantity ?? item?.quantity ?? 1) || 1;
+            categoryMap.set(name, (categoryMap.get(name) || 0) + qty);
+          });
         }
 
-        const cResp = await fetch(`${API_BASE_URL}/user-order/most-selling-category`, {
-          headers: { ...getAuthHeaders() },
-          cache: "no-store",
+        setAmounts({
+          todayOrderAmount,
+          yesterdayOrderAmount,
+          monthlyOrderAmount,
+          totalOrderAmount,
+          todayCardPaymentAmount,
+          todayCashPaymentAmount,
+          yesterDayCardPaymentAmount,
+          yesterDayCashPaymentAmount,
         });
-        const cJson = (cResp.headers.get("content-type") || "").includes("application/json")
-          ? await cResp.json()
-          : {};
-        if (cResp.ok && Array.isArray(cJson?.categoryData)) setCategoryData(cJson.categoryData);
 
-        const rUrl = new URL(`${API_BASE_URL}/user-order/dashboard-recent-order`);
-        rUrl.searchParams.set("page", "1");
-        rUrl.searchParams.set("limit", "8");
-        const rResp = await fetch(rUrl.toString(), {
-          headers: { ...getAuthHeaders() },
-          cache: "no-store",
+        setOrderCounts({
+          today: todayCount,
+          monthly: monthlyCount,
+          processing: processingCount,
         });
-        const rJson = (rResp.headers.get("content-type") || "").includes("application/json")
-          ? await rResp.json()
-          : {};
-        if (rResp.ok && Array.isArray(rJson?.orders)) {
-          const sorted = [...rJson.orders].sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a));
-          setRecentOrders({ orders: sorted, totalOrder: rJson.totalOrder || sorted.length });
-        }
+
+        setSalesReport(Array.from(salesMap.values()));
+
+        const topCategories = Array.from(categoryMap.entries())
+          .map(([name, count]) => ({ _id: name, count }))
+          .sort((a, b) => Number(b.count || 0) - Number(a.count || 0))
+          .slice(0, 5);
+        setCategoryData(topCategories);
+
+        setRecentOrders({
+          orders: orders.slice(0, 8),
+          totalOrder: orders.length,
+        });
+        setError("");
       } catch {
         setError("Failed to load dashboard metrics");
       }
@@ -504,15 +589,15 @@ const AdminDashboard = () => {
                 </div>
                 <div>
                   <span>Today Orders</span>
-                  <strong>{formatAmount(amounts.todayOrderAmount)}</strong>
+                  <strong>{formatAmount(orderCounts.today)}</strong>
                 </div>
                 <div>
                   <span>Monthly Orders</span>
-                  <strong>{formatAmount(amounts.monthlyOrderAmount)}</strong>
+                  <strong>{formatAmount(orderCounts.monthly)}</strong>
                 </div>
                 <div>
                   <span>Processing Queue</span>
-                  <strong>{recentOrders.orders.filter((o) => String(o.status || "").toLowerCase() === "processing").length}</strong>
+                  <strong>{orderCounts.processing}</strong>
                 </div>
               </div>
             </article>
