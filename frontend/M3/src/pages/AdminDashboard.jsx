@@ -237,6 +237,7 @@ const AdminDashboard = () => {
   const navigateTo = (path) => navigate(path);
   const canAccessStaffManagement = () => ["Manager", "CEO"].includes(adminData?.role);
   const canViewCustomers = () => adminData?.role === "CEO";
+  const canAccessRestrictedSections = () => ["Manager", "CEO"].includes(adminData?.role);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -437,10 +438,10 @@ const AdminDashboard = () => {
     { label: "Clinical Products", hint: "Treatments", path: "/admin/clinical-products", show: true },
     { label: "Machines", hint: "Devices", path: "/admin/machines", show: true },
     { label: "Orders", hint: "Fulfillment", path: "/admin/orders", show: true },
-    { label: "Contact Us", hint: "Leads", path: "/admin/contact-us", show: true },
+    { label: "Contact Us", hint: "Leads", path: "/admin/contact-us", show: canAccessRestrictedSections() },
     { label: "Brands", hint: "Portfolio", path: "/admin/brands", show: true },
-    { label: "Categories", hint: "Structure", path: "/admin/categories", show: true },
-    { label: "Coupons", hint: "Promotions", path: "/admin/coupons", show: true },
+    { label: "Categories", hint: "Structure", path: "/admin/categories", show: canAccessRestrictedSections() },
+    { label: "Coupons", hint: "Promotions", path: "/admin/coupons", show: canAccessRestrictedSections() },
     { label: "Image Manager", hint: "Assets", path: "/admin/cloudinary", show: true },
   ];
 
@@ -667,7 +668,9 @@ const AdminDashboard = () => {
         <button onClick={() => navigateTo("/admin/dashboard")} className="active">Dashboard</button>
         <button onClick={() => navigateTo("/admin/orders")}>Orders</button>
         <button onClick={() => navigateTo("/admin/products")}>Products</button>
-        <button onClick={() => navigateTo("/admin/contact-us")}>Contacts</button>
+        {canAccessRestrictedSections() && (
+          <button onClick={() => navigateTo("/admin/contact-us")}>Contacts</button>
+        )}
       </nav>
     </div>
   );

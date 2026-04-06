@@ -73,9 +73,18 @@ const App = () => {
           <Route path="/admin/brands/:id" element={<ProtectedRoute><BrandForm /></ProtectedRoute>} />
 
           {/* Category Management (protected) */}
-          <Route path="/admin/categories" element={<ProtectedRoute><CategoryList /></ProtectedRoute>} />
-          <Route path="/admin/categories/new" element={<ProtectedRoute><CategoryForm /></ProtectedRoute>} />
-          <Route path="/admin/categories/:id" element={<ProtectedRoute><CategoryForm /></ProtectedRoute>} />
+          <Route
+            path="/admin/categories"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><CategoryList /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/categories/new"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><CategoryForm /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/categories/:id"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><CategoryForm /></ProtectedRoute>}
+          />
 
           {/* Product Management (protected) */}
           <Route path="/admin/products" element={<ProtectedRoute><ProductList /></ProtectedRoute>} />
@@ -96,13 +105,25 @@ const App = () => {
           <Route path="/admin/users" element={<ProtectedRoute><UserList /></ProtectedRoute>} />
 
           {/* Coupon Management (protected) */}
-          <Route path="/admin/coupons" element={<ProtectedRoute><CouponList /></ProtectedRoute>} />
-          <Route path="/admin/coupons/new" element={<ProtectedRoute><CouponForm /></ProtectedRoute>} />
-          <Route path="/admin/coupons/:id" element={<ProtectedRoute><CouponForm /></ProtectedRoute>} />
+          <Route
+            path="/admin/coupons"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><CouponList /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/coupons/new"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><CouponForm /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/coupons/:id"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><CouponForm /></ProtectedRoute>}
+          />
 
           {/* Cloudinary (protected) */}
           <Route path="/admin/cloudinary" element={<ProtectedRoute><CloudinaryPage /></ProtectedRoute>} />
-          <Route path="/admin/contact-us" element={<ProtectedRoute><ContactUsList /></ProtectedRoute>} />
+          <Route
+            path="/admin/contact-us"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><ContactUsList /></ProtectedRoute>}
+          />
           
           {/* Redirect route for email links */}
           <Route path="/forget-password/:token" element={<RedirectToResetPassword />} />
