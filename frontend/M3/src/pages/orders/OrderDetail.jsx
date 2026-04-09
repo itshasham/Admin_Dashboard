@@ -644,6 +644,8 @@ const OrderDetail = () => {
             <div><label>Country</label><p>{order?.country || ""}</p></div>
             <div><label>Zip Code</label><p>{order?.zipCode || ""}</p></div>
             <div><label>Shipping</label><p>{order?.shippingOption || ""}</p></div>
+            <div><label>Courier</label><p>{order?.courierCompany || order?.courierName || "—"}</p></div>
+            <div><label>Tracking ID</label><p>{order?.trackingId || order?.trackingNumber || "—"}</p></div>
           </div>
         </div>
       </div>
