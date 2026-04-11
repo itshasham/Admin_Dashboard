@@ -261,6 +261,31 @@
   min-width: 84px;
 }
 
+.payment-verify-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.payment-verify-badge.is-verified {
+  background: #e8f7ee;
+  color: #11643a;
+  border-color: #9dd8b6;
+}
+
+.payment-verify-badge.is-pending {
+  background: #fff4e5;
+  color: #8a4b08;
+  border-color: #f0c188;
+}
+
 .orders-error-panel {
   margin-top: 0;
   margin-bottom: 10px;
@@ -311,5 +336,47 @@
 
   .orders-table {
     min-width: 860px;
+  }
+}
+
+.payment-verify-form {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.payment-form-title {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.payment-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.textarea {
+  margin-top: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-family: var(--font-body);
+  resize: vertical;
+}
+
+.payment-form-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1024px) {
+  .payment-form-grid {
+    grid-template-columns: 1fr;
   }
 }

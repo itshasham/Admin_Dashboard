@@ -11,6 +11,15 @@ const pickArray = (payload) => {
   return [];
 };
 
+const normalizeMachineError = (message) => {
+  const raw = String(message || "").trim();
+  if (!raw) return "Unable to load machines right now.";
+  if (raw.toLowerCase().includes("not found")) {
+    return "Machines API is unavailable. Please redeploy backend and try again.";
+  }
+  return raw;
+};
+
 const MachineList = () => {
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -38,7 +47,7 @@ const MachineList = () => {
       setMachines(pickArray(data));
     } catch (err) {
       setMachines([]);
-      setError(err.message || "Failed to load machines");
+      setError(normalizeMachineError(err?.message || "Failed to load machines"));
     } finally {
       setLoading(false);
     }
@@ -79,9 +88,28 @@ const MachineList = () => {
       </div>
 
       {loading && <div>Loading...</div>}
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error-panel" role="alert">
+          <p className="error-panel-title">{error}</p>
+          <div className="actions" style={{ marginTop: 10 }}>
+            <button className="btn" onClick={fetchMachines}>Retry</button>
+          </div>
+        </div>
+      )}
 
-      {!loading && !error && (
+      {!loading && !error && machines.length === 0 && (
+        <div className="card" style={{ padding: 20 }}>
+          <h3 style={{ marginBottom: 6 }}>No machines found</h3>
+          <p className="muted" style={{ marginBottom: 12 }}>
+            Add your first machine so it appears on the website and inquiry flow.
+          </p>
+          <button className="btn" onClick={() => (window.location.href = "/admin/machines/new")}>
+            + Add Machine
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && machines.length > 0 && (
         <table className="table">
           <thead>
             <tr>
@@ -137,11 +165,6 @@ const MachineList = () => {
                 </tr>
               );
             })}
-            {!machines.length && (
-              <tr>
-                <td colSpan={8} className="muted">No machines found.</td>
-              </tr>
-            )}
           </tbody>
         </table>
       )}

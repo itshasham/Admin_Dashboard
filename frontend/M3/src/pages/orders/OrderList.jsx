@@ -12,6 +12,7 @@ const OrderList = () => {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [role, setRole] = useState("");
 
   const getAuthHeaders = () => {
     try {
@@ -35,7 +36,7 @@ const OrderList = () => {
     setLoading(true);
     setError("");
     try {
-      const resp = await fetch(`${API_BASE_URL}/order/orders`, {
+      const resp = await fetch(`${API_BASE_URL}/order/admin/orders`, {
         headers: { ...getAuthHeaders() },
         cache: "no-store"
       });
@@ -54,8 +55,17 @@ const OrderList = () => {
   };
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem("adminData");
+      const parsed = raw ? JSON.parse(raw) : null;
+      setRole(String(parsed?.role || ""));
+    } catch {
+      setRole("");
+    }
     fetchOrders();
   }, []);
+
+  const canViewPaymentVerification = role === "CEO" || role === "Manager";
 
   const normalizeStatus = (status) => {
     const value = String(status || "").toLowerCase();
@@ -154,6 +164,11 @@ const OrderList = () => {
     } catch {
       return "-";
     }
+  };
+
+  const isPaymentVerified = (order) => {
+    const status = String(order?.paymentVerification?.status || "").toLowerCase();
+    return order?.paymentVerification?.isVerified === true || status === "verified";
   };
 
   return (
@@ -276,6 +291,7 @@ const OrderList = () => {
                   <th>Invoice</th>
                   <th>Customer</th>
                   <th>Payment</th>
+                  {canViewPaymentVerification && <th>Payment Verify</th>}
                   <th>Date</th>
                   <th>Total</th>
                   <th>Status</th>
@@ -297,6 +313,17 @@ const OrderList = () => {
                     <td>
                       <span className="payment-text">{String(order?.paymentMethod || "-").toUpperCase()}</span>
                     </td>
+                    {canViewPaymentVerification && (
+                      <td>
+                        <span
+                          className={`payment-verify-badge ${
+                            isPaymentVerified(order) ? "is-verified" : "is-pending"
+                          }`}
+                        >
+                          {isPaymentVerified(order) ? "✓ Verified" : "Unverified"}
+                        </span>
+                      </td>
+                    )}
                     <td>{formatDate(order?.createdAt || order?.updatedAt)}</td>
                     <td>
                       <span className="amount-pill">{formatAmount(order?.totalAmount)}</span>

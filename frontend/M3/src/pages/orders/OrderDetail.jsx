@@ -12,13 +12,30 @@ const OrderDetail = () => {
   const [saving, setSaving] = useState(false);
   const [trackingId, setTrackingId] = useState("");
   const [courierCompany, setCourierCompany] = useState("");
+  const [deliveryPersonName, setDeliveryPersonName] = useState("");
   const [role, setRole] = useState("");
-  const courierCompanies = ["DHL", "TCS", "FedEx", "Blue Dart", "Leopards"];
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentVerificationStatus, setPaymentVerificationStatus] = useState("pending");
+  const [paymentReceivedAmount, setPaymentReceivedAmount] = useState("");
+  const [paymentReceivedMethod, setPaymentReceivedMethod] = useState("");
+  const [paymentReceivedIn, setPaymentReceivedIn] = useState("");
+  const [paymentTransactionReference, setPaymentTransactionReference] = useState("");
+  const [paymentVerificationNotes, setPaymentVerificationNotes] = useState("");
+  const courierCompanies = ["DHL", "TCS", "FedEx", "Blue Dart", "Leopards", "PostEx", "Local"];
   const normalizeStatus = (value) => {
     const statusValue = String(value || "").toLowerCase();
     if (statusValue === "cancelled" || statusValue === "canceled") return "cancel";
     if (statusValue === "delivered" || statusValue === "dispatched") return "dispatch";
     return statusValue || "pending";
+  };
+  const normalizeCourierKey = (value) =>
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s._-]+/g, "");
+  const isLocalDeliveryCourier = (value) => {
+    const key = normalizeCourierKey(value);
+    return key === "local" || key === "localdelivery";
   };
 
   const getAuthHeaders = () => {
@@ -79,9 +96,8 @@ const OrderDetail = () => {
     setError("");
     try {
       const endpoints = [
+        `${API_BASE_URL}/order/admin/orders/${id}`,
         `${API_BASE_URL}/order/${id}`,
-        `${API_BASE_URL}/order/orders/${id}`,
-        `${API_BASE_URL}/admin/orders/${id}`,
       ];
 
       let data = null;
@@ -172,6 +188,23 @@ const OrderDetail = () => {
           if (ord?.status) setStatus(normalizeStatus(ord.status));
           setTrackingId(String(ord?.trackingId || ord?.trackingNumber || ""));
           setCourierCompany(String(ord?.courierCompany || ord?.courierName || ""));
+          setDeliveryPersonName(String(ord?.deliveryPersonName || ""));
+          const paymentVerification = ord?.paymentVerification || {};
+          const statusValue =
+            String(paymentVerification?.status || "").toLowerCase() === "verified" ||
+            paymentVerification?.isVerified === true
+              ? "verified"
+              : "pending";
+          setPaymentVerificationStatus(statusValue);
+          setPaymentReceivedAmount(
+            paymentVerification?.amountReceived !== undefined && paymentVerification?.amountReceived !== null
+              ? String(paymentVerification.amountReceived)
+              : String(ord?.totalAmount ?? 0)
+          );
+          setPaymentReceivedMethod(String(paymentVerification?.receivedMethod || ""));
+          setPaymentReceivedIn(String(paymentVerification?.receivedIn || ""));
+          setPaymentTransactionReference(String(paymentVerification?.transactionReference || ""));
+          setPaymentVerificationNotes(String(paymentVerification?.notes || ""));
           
         } else {
           // EMERGENCY FALLBACK: If all else fails, create a minimal order object
@@ -196,6 +229,13 @@ const OrderDetail = () => {
           setStatus(normalizeStatus(emergencyOrder.status));
           setTrackingId(String(emergencyOrder?.trackingId || emergencyOrder?.trackingNumber || ""));
           setCourierCompany(String(emergencyOrder?.courierCompany || emergencyOrder?.courierName || ""));
+          setDeliveryPersonName(String(emergencyOrder?.deliveryPersonName || ""));
+          setPaymentVerificationStatus("pending");
+          setPaymentReceivedAmount(String(emergencyOrder?.totalAmount ?? 0));
+          setPaymentReceivedMethod("");
+          setPaymentReceivedIn("");
+          setPaymentTransactionReference("");
+          setPaymentVerificationNotes("");
         }
       } else {
         // EMERGENCY FALLBACK: Create minimal order from ID only
@@ -218,6 +258,12 @@ const OrderDetail = () => {
         
         setOrder(emergencyOrder);
         setStatus(normalizeStatus("unknown"));
+        setPaymentVerificationStatus("pending");
+        setPaymentReceivedAmount(String(emergencyOrder?.totalAmount ?? 0));
+        setPaymentReceivedMethod("");
+        setPaymentReceivedIn("");
+        setPaymentTransactionReference("");
+        setPaymentVerificationNotes("");
       }
     } catch (err) {
       console.error("Failed to load order:", err);
@@ -235,22 +281,37 @@ const OrderDetail = () => {
       const sendStatus = nextStatus === "dispatch" ? "dispatched" : nextStatus;
 
       if (sendStatus === "dispatched") {
-        if (!String(trackingId || "").trim() || !String(courierCompany || "").trim()) {
-          alert("trackingId and courierCompany are required to mark an order as dispatched.");
+        const courier = String(courierCompany || "").trim();
+        const localDelivery = isLocalDeliveryCourier(courier);
+        if (!courier) {
+          alert("courierCompany is required to mark an order as dispatched.");
+          return;
+        }
+        if (localDelivery && !String(deliveryPersonName || "").trim()) {
+          alert("deliveryPersonName is required for local dispatched orders.");
+          return;
+        }
+        if (!localDelivery && !String(trackingId || "").trim()) {
+          alert("trackingId is required to mark an order as dispatched.");
           return;
         }
       }
 
+      const normalizedCourierCompany = String(courierCompany || "").trim();
+      const isLocalCourier = isLocalDeliveryCourier(normalizedCourierCompany);
       const body = {
         status: sendStatus,
         ...(sendStatus === "dispatched"
-          ? { trackingId: String(trackingId).trim(), courierCompany: String(courierCompany).trim() }
+          ? {
+              courierCompany: normalizedCourierCompany,
+              trackingId: isLocalCourier ? "" : String(trackingId).trim(),
+              deliveryPersonName: isLocalCourier ? String(deliveryPersonName).trim() : "",
+            }
           : {}),
       };
 
       const updateEndpoints = [
         { url: `${API_BASE_URL}/order/update-status/${id}`, method: "PATCH" },
-        { url: `${API_BASE_URL}/admin/orders/${id}`, method: "PUT" },
       ];
 
       let updated = false;
@@ -283,6 +344,72 @@ const OrderDetail = () => {
       alert(err.message || "Failed to update order");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const updatePaymentVerification = async () => {
+    if (!id) return;
+    if (role !== "CEO") {
+      alert("Only CEO can update payment verification.");
+      return;
+    }
+
+    const verificationStatus = String(paymentVerificationStatus || "pending").toLowerCase() === "verified"
+      ? "verified"
+      : "pending";
+
+    if (verificationStatus === "verified") {
+      if (!String(paymentReceivedMethod || "").trim()) {
+        alert("Please select received method (cash or online).");
+        return;
+      }
+      if (!String(paymentReceivedIn || "").trim()) {
+        alert("Please enter where payment was received.");
+        return;
+      }
+    }
+
+    setPaymentSaving(true);
+    try {
+      const payload = {
+        status: verificationStatus,
+        amountReceived:
+          verificationStatus === "verified"
+            ? Number(paymentReceivedAmount || 0)
+            : 0,
+        receivedMethod:
+          verificationStatus === "verified"
+            ? String(paymentReceivedMethod || "").trim().toLowerCase()
+            : "",
+        receivedIn:
+          verificationStatus === "verified"
+            ? String(paymentReceivedIn || "").trim()
+            : "",
+        transactionReference:
+          verificationStatus === "verified"
+            ? String(paymentTransactionReference || "").trim()
+            : "",
+        notes: String(paymentVerificationNotes || "").trim(),
+      };
+
+      const resp = await fetch(`${API_BASE_URL}/order/admin/orders/${id}/payment-verification`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(payload),
+      });
+      const isJson = resp.headers.get("content-type")?.includes("application/json");
+      const data = isJson ? await resp.json().catch(() => ({})) : {};
+
+      if (!resp.ok) {
+        throw new Error(data?.message || "Failed to update payment verification");
+      }
+
+      await fetchOrder();
+      alert("Payment verification updated successfully.");
+    } catch (err) {
+      alert(err.message || "Failed to update payment verification");
+    } finally {
+      setPaymentSaving(false);
     }
   };
 
@@ -583,6 +710,21 @@ const OrderDetail = () => {
   const selectedStatus = statusOptions.includes(displayStatus) ? displayStatus : statusOptions[0];
   const canUpdate = !saving && selectedStatus !== currentStatus;
   const statusClass = displayStatus === "dispatch" ? "status-badge status-success" : displayStatus === "processing" ? "status-badge status-info" : displayStatus === "cancel" ? "status-badge status-danger" : "status-badge status-warn";
+  const localCourierSelected = isLocalDeliveryCourier(courierCompany);
+  const orderCourierName = String(order?.courierCompany || order?.courierName || "").trim();
+  const orderIsLocalDelivery = isLocalDeliveryCourier(orderCourierName);
+  const orderTrackingLabel = orderIsLocalDelivery ? "N/A (Local Delivery)" : (order?.trackingId || order?.trackingNumber || "—");
+  const canViewPaymentVerification = role === "CEO" || role === "Manager";
+  const canEditPaymentVerification = role === "CEO";
+  const paymentVerificationStatusLabel =
+    String(order?.paymentVerification?.status || "").toLowerCase() === "verified" ||
+    order?.paymentVerification?.isVerified === true
+      ? "Verified"
+      : "Unverified";
+  const paymentVerificationClass =
+    paymentVerificationStatusLabel === "Verified"
+      ? "status-badge status-success"
+      : "status-badge status-warn";
 
   // Wrap the entire render in a try-catch to prevent white screen
   try {
@@ -605,18 +747,39 @@ const OrderDetail = () => {
           </select>
           {normalizeStatus(selectedStatus) === "dispatch" && currentStatus === "processing" && (
             <>
-              <select className="select" value={courierCompany} onChange={(e) => setCourierCompany(e.target.value)}>
+              <select
+                className="select"
+                value={courierCompany}
+                onChange={(e) => {
+                  const nextCourier = e.target.value;
+                  setCourierCompany(nextCourier);
+                  if (isLocalDeliveryCourier(nextCourier)) {
+                    setTrackingId("");
+                  } else {
+                    setDeliveryPersonName("");
+                  }
+                }}
+              >
                 <option value="">Courier Company</option>
                 {courierCompanies.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <input
-                className="select"
-                placeholder="Tracking ID"
-                value={trackingId}
-                onChange={(e) => setTrackingId(e.target.value)}
-              />
+              {localCourierSelected ? (
+                <input
+                  className="select"
+                  placeholder="Delivery Person Name"
+                  value={deliveryPersonName}
+                  onChange={(e) => setDeliveryPersonName(e.target.value)}
+                />
+              ) : (
+                <input
+                  className="select"
+                  placeholder="Tracking ID"
+                  value={trackingId}
+                  onChange={(e) => setTrackingId(e.target.value)}
+                />
+              )}
             </>
           )}
           <button className="btn" disabled={!canUpdate} onClick={updateStatus}>{saving ? "Saving..." : "Update"}</button>
@@ -645,7 +808,8 @@ const OrderDetail = () => {
             <div><label>Zip Code</label><p>{order?.zipCode || ""}</p></div>
             <div><label>Shipping</label><p>{order?.shippingOption || ""}</p></div>
             <div><label>Courier</label><p>{order?.courierCompany || order?.courierName || "—"}</p></div>
-            <div><label>Tracking ID</label><p>{order?.trackingId || order?.trackingNumber || "—"}</p></div>
+            <div><label>Tracking ID</label><p>{orderTrackingLabel}</p></div>
+            <div><label>Delivery Person</label><p>{order?.deliveryPersonName || "—"}</p></div>
           </div>
         </div>
       </div>
@@ -670,6 +834,90 @@ const OrderDetail = () => {
           </ul>
         </div>
       </div>
+
+      {canViewPaymentVerification && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="card-header"><h2>Payment Verification</h2></div>
+          <div className="info-grid">
+            <div><label>Order Payment Method</label><p>{order?.paymentMethod || "—"}</p></div>
+            <div><label>Order Total</label><p>{order?.totalAmount ?? 0}</p></div>
+            <div><label>Verification Status</label><p><span className={paymentVerificationClass}>{paymentVerificationStatusLabel}</span></p></div>
+            <div><label>Amount Received</label><p>{order?.paymentVerification?.amountReceived ?? "—"}</p></div>
+            <div><label>Received Via</label><p>{order?.paymentVerification?.receivedMethod || "—"}</p></div>
+            <div><label>Received In</label><p>{order?.paymentVerification?.receivedIn || "—"}</p></div>
+            <div><label>Reference</label><p>{order?.paymentVerification?.transactionReference || "—"}</p></div>
+            <div><label>Verified By</label><p>{order?.paymentVerification?.verifiedBy?.name || "—"}</p></div>
+            <div><label>Verified At</label><p>{fmtDateTime(order?.paymentVerification?.verifiedAt)}</p></div>
+            <div className="full"><label>Notes</label><p>{order?.paymentVerification?.notes || "—"}</p></div>
+          </div>
+
+          {canEditPaymentVerification && (
+            <div className="payment-verify-form">
+              <h3 className="payment-form-title">Update Verification</h3>
+              <div className="payment-form-grid">
+                <select
+                  className="select"
+                  value={paymentVerificationStatus}
+                  onChange={(e) => setPaymentVerificationStatus(e.target.value)}
+                >
+                  <option value="pending">Unverified</option>
+                  <option value="verified">Verified</option>
+                </select>
+                <select
+                  className="select"
+                  value={paymentReceivedMethod}
+                  onChange={(e) => setPaymentReceivedMethod(e.target.value)}
+                  disabled={paymentVerificationStatus !== "verified"}
+                >
+                  <option value="">Received Via</option>
+                  <option value="cash">Cash</option>
+                  <option value="online">Online</option>
+                </select>
+                <input
+                  className="select"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Amount Received"
+                  value={paymentReceivedAmount}
+                  onChange={(e) => setPaymentReceivedAmount(e.target.value)}
+                  disabled={paymentVerificationStatus !== "verified"}
+                />
+                <input
+                  className="select"
+                  placeholder="Received In (Cash Counter / Bank / Wallet)"
+                  value={paymentReceivedIn}
+                  onChange={(e) => setPaymentReceivedIn(e.target.value)}
+                  disabled={paymentVerificationStatus !== "verified"}
+                />
+                <input
+                  className="select"
+                  placeholder="Transaction Reference (optional)"
+                  value={paymentTransactionReference}
+                  onChange={(e) => setPaymentTransactionReference(e.target.value)}
+                  disabled={paymentVerificationStatus !== "verified"}
+                />
+              </div>
+              <textarea
+                className="textarea"
+                rows={3}
+                placeholder="Notes (optional)"
+                value={paymentVerificationNotes}
+                onChange={(e) => setPaymentVerificationNotes(e.target.value)}
+              />
+              <div className="payment-form-actions">
+                <button
+                  className="btn"
+                  onClick={updatePaymentVerification}
+                  disabled={paymentSaving}
+                >
+                  {paymentSaving ? "Saving..." : "Save Payment Verification"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: 16 }}>
         <div className="card-header"><h2>Items</h2></div>
