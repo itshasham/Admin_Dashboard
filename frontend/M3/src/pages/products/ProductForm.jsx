@@ -21,12 +21,6 @@ const emptyProduct = {
   productType: "",
   description: "",
   imageURLs: [],
-  bogoOffer: {
-    enabled: false,
-    bundleSize: 2,
-    bundlePrice: "",
-    label: "Buy 1 Get 1 FREE",
-  },
 };
 
 const normalizeRef = (value) => ({
@@ -316,15 +310,6 @@ const ProductForm = () => {
           featured: Boolean(payload?.feature ?? payload?.featured ?? false),
           unit: normalizedUnit,
           imageURLs: normalizeImageCollection(payload?.imageURLs),
-          bogoOffer: {
-            enabled: Boolean(payload?.bogoOffer?.enabled),
-            bundleSize: Number(payload?.bogoOffer?.bundleSize || 2),
-            bundlePrice:
-              payload?.bogoOffer?.bundlePrice === 0 || payload?.bogoOffer?.bundlePrice
-                ? Number(payload?.bogoOffer?.bundlePrice)
-                : "",
-            label: String(payload?.bogoOffer?.label || "Buy 1 Get 1 FREE"),
-          },
         });
         const start = toYMD(payload?.offerDate?.startDate) || "";
         const end = toYMD(payload?.offerDate?.endDate) || "";
@@ -542,17 +527,6 @@ const ProductForm = () => {
     if (!product.category?.id?.trim()) errors.push("Category ID is required");
     if (!product.children?.trim()) errors.push("Children field is required");
     if (!product.productType?.trim()) errors.push("Product type is required");
-    if (product?.bogoOffer?.enabled) {
-      const bundleSize = Number(product?.bogoOffer?.bundleSize || 0);
-      const bundlePrice = Number(product?.bogoOffer?.bundlePrice || 0);
-      if (!Number.isFinite(bundleSize) || bundleSize < 2) {
-        errors.push("BOGO bundle size must be at least 2");
-      }
-      if (!Number.isFinite(bundlePrice) || bundlePrice <= 0) {
-        errors.push("BOGO bundle price is required when the offer is enabled");
-      }
-    }
-    
     return errors;
   };
 
@@ -593,15 +567,6 @@ const ProductForm = () => {
         productType: product.productType,
         description: product.description,
         imageURLs: normalizeImageCollection(product.imageURLs),
-        bogoOffer: {
-          enabled: Boolean(product?.bogoOffer?.enabled),
-          bundleSize: Number(product?.bogoOffer?.bundleSize || 2),
-          bundlePrice:
-            product?.bogoOffer?.bundlePrice === ""
-              ? 0
-              : Number(product?.bogoOffer?.bundlePrice || 0),
-          label: String(product?.bogoOffer?.label || "Buy 1 Get 1 FREE").trim(),
-        },
       };
 
       const startISO = toISODateStart(offerStart);
@@ -800,74 +765,6 @@ const ProductForm = () => {
                 <div className="form-row">
                   <div className="form-cell">Discount</div>
                   <div className="form-cell"><input name="discount" type="number" placeholder="0" value={product.discount} onChange={handleChange} /></div>
-                </div>
-              </div>
-            </div>
-
-            <div className="section appear delay-1">
-              <div className="section-title">
-                <h3>Offer Controls</h3>
-                <span className="hint">Turn BOGO checkout logic on per product</span>
-              </div>
-              <div className="form-table">
-                <div className="form-row">
-                  <div className="form-cell">Enable BOGO</div>
-                  <div className="form-cell">
-                    <label className="inline-switch" htmlFor="bogo-enabled-toggle">
-                      <input
-                        id="bogo-enabled-toggle"
-                        name="enabled"
-                        type="checkbox"
-                        checked={Boolean(product?.bogoOffer?.enabled)}
-                        onChange={(e) => handleNestedChange(e, "bogoOffer")}
-                      />
-                      <span>
-                        {product?.bogoOffer?.enabled
-                          ? "Yes - checkout starts at an even bundle"
-                          : "No - use standard one-by-one quantity"}
-                      </span>
-                    </label>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-cell">Bundle Size</div>
-                  <div className="form-cell">
-                    <input
-                      name="bundleSize"
-                      type="number"
-                      min="2"
-                      step="1"
-                      value={product?.bogoOffer?.bundleSize ?? 2}
-                      onChange={(e) => handleNestedChange(e, "bogoOffer")}
-                    />
-                    <span className="subtext">For buy-one-get-one, keep this at 2 so customers can only move in even numbers.</span>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-cell">Bundle Price</div>
-                  <div className="form-cell">
-                    <input
-                      name="bundlePrice"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="4200"
-                      value={product?.bogoOffer?.bundlePrice}
-                      onChange={(e) => handleNestedChange(e, "bogoOffer")}
-                    />
-                    <span className="subtext">Example: 4200 means the full 2-piece BOGO bundle checks out for PKR 4,200.</span>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-cell">Offer Label</div>
-                  <div className="form-cell">
-                    <input
-                      name="label"
-                      placeholder="Buy 1 Get 1 FREE"
-                      value={product?.bogoOffer?.label || ""}
-                      onChange={(e) => handleNestedChange(e, "bogoOffer")}
-                    />
-                  </div>
                 </div>
               </div>
             </div>
