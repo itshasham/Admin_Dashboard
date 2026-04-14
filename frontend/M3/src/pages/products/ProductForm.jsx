@@ -21,6 +21,12 @@ const emptyProduct = {
   productType: "",
   description: "",
   imageURLs: [],
+  bogoOffer: {
+    enabled: false,
+    label: "Buy 1 Get 1 FREE",
+    bundleSize: 2,
+    bundlePrice: 0,
+  },
 };
 
 const normalizeRef = (value) => ({
@@ -28,6 +34,12 @@ const normalizeRef = (value) => ({
   id: String(value?.id || "").trim(),
 });
 const normalizeType = (value) => String(value || "").trim().toLowerCase();
+const normalizeBogoOffer = (value) => ({
+  enabled: Boolean(value?.enabled),
+  label: String(value?.label || "Buy 1 Get 1 FREE").trim() || "Buy 1 Get 1 FREE",
+  bundleSize: Math.max(1, Number(value?.bundleSize || 2)),
+  bundlePrice: Math.max(0, Number(value?.bundlePrice || 0)),
+});
 
 const pickCloudinaryArray = (payload) => {
   if (!payload || typeof payload !== "object") return [];
@@ -310,6 +322,7 @@ const ProductForm = () => {
           featured: Boolean(payload?.feature ?? payload?.featured ?? false),
           unit: normalizedUnit,
           imageURLs: normalizeImageCollection(payload?.imageURLs),
+          bogoOffer: normalizeBogoOffer(payload?.bogoOffer),
         });
         const start = toYMD(payload?.offerDate?.startDate) || "";
         const end = toYMD(payload?.offerDate?.endDate) || "";
@@ -386,6 +399,17 @@ const ProductForm = () => {
       [root]: {
         ...(prev[root] && typeof prev[root] === "object" ? prev[root] : {}),
         [name]: value,
+      },
+    }));
+  };
+
+  const handleBogoChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setProduct((prev) => ({
+      ...prev,
+      bogoOffer: {
+        ...normalizeBogoOffer(prev?.bogoOffer),
+        [name]: type === "checkbox" ? checked : value,
       },
     }));
   };
@@ -568,6 +592,12 @@ const ProductForm = () => {
         productType: product.productType,
         description: product.description,
         imageURLs: normalizeImageCollection(product.imageURLs),
+        bogoOffer: {
+          enabled: Boolean(product?.bogoOffer?.enabled),
+          label: String(product?.bogoOffer?.label || "Buy 1 Get 1 FREE").trim() || "Buy 1 Get 1 FREE",
+          bundleSize: Math.max(1, Number(product?.bogoOffer?.bundleSize || 2)),
+          bundlePrice: Math.max(0, Number(product?.bogoOffer?.bundlePrice || 0)),
+        },
       };
 
       const startISO = toISODateStart(offerStart);
@@ -671,6 +701,15 @@ const ProductForm = () => {
                 <span>Stock</span>
                 <strong>{product.quantity || 0} units</strong>
               </div>
+              {Boolean(product?.bogoOffer?.enabled) && (
+                <div className="product-preview-row">
+                  <span>BOGO</span>
+                  <strong>
+                    {Math.max(1, Number(product?.bogoOffer?.bundleSize || 2))} for PKR{" "}
+                    {Math.max(0, Number(product?.bogoOffer?.bundlePrice || 0))}
+                  </strong>
+                </div>
+              )}
               <div className="product-preview-row">
                 <span>Brand</span>
                 <strong>{product.brand?.name || "Unassigned"}</strong>
@@ -934,6 +973,59 @@ const ProductForm = () => {
                 <div className="form-row">
                   <div className="form-cell">Offer End Date</div>
                   <div className="form-cell"><input type="date" value={offerEnd} onChange={(e) => setOfferEnd(e.target.value)} /></div>
+                </div>
+                <div className="form-row">
+                  <div className="form-cell">BOGO Enabled</div>
+                  <div className="form-cell">
+                    <label className="inline-switch" htmlFor="bogo-toggle">
+                      <input
+                        id="bogo-toggle"
+                        name="enabled"
+                        type="checkbox"
+                        checked={Boolean(product?.bogoOffer?.enabled)}
+                        onChange={handleBogoChange}
+                      />
+                      <span>{product?.bogoOffer?.enabled ? "Enabled" : "Disabled"}</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-cell">Deal Label</div>
+                  <div className="form-cell">
+                    <input
+                      name="label"
+                      placeholder="Buy 1 Get 1 FREE"
+                      value={product?.bogoOffer?.label || ""}
+                      onChange={handleBogoChange}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-cell">Bundle Size</div>
+                  <div className="form-cell">
+                    <input
+                      name="bundleSize"
+                      type="number"
+                      min="1"
+                      placeholder="2"
+                      value={product?.bogoOffer?.bundleSize ?? 2}
+                      onChange={handleBogoChange}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-cell">Bundle Price (PKR)</div>
+                  <div className="form-cell">
+                    <input
+                      name="bundlePrice"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="4200"
+                      value={product?.bogoOffer?.bundlePrice ?? 0}
+                      onChange={handleBogoChange}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
