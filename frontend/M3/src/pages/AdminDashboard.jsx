@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./AdminDashboard.css";
 import { API_BASE_URL } from "../config/api";
 
@@ -196,8 +196,10 @@ const AdminDashboard = () => {
     monthly: 0,
     processing: 0,
   });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   const getAuthHeaders = () => {
     try {
@@ -238,6 +240,14 @@ const AdminDashboard = () => {
   const canAccessStaffManagement = () => ["Manager", "CEO"].includes(adminData?.role);
   const canViewCustomers = () => adminData?.role === "CEO";
   const canAccessRestrictedSections = () => ["Manager", "CEO"].includes(adminData?.role);
+
+  useEffect(() => {
+    document.title = "NEES Medical Admin";
+  }, []);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -399,11 +409,10 @@ const AdminDashboard = () => {
   };
   const formatCurrency = (value) => {
     const amount = Number(value) || 0;
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
+    const number = new Intl.NumberFormat("en-PK", {
       maximumFractionDigits: 0,
     }).format(amount);
+    return `Rs ${number}`;
   };
   const percent = (part, total) => {
     if (total <= 0) return 0;
@@ -431,12 +440,13 @@ const AdminDashboard = () => {
     }
   };
   const navItems = [
-    { label: "Dashboard", hint: "Overview", path: "/admin/dashboard", show: true, active: true },
+    { label: "Dashboard", hint: "Overview", path: "/admin/dashboard", show: true },
     { label: "Staff Management", hint: "Roles", path: "/admin/staff", show: canAccessStaffManagement() },
     { label: "Customers", hint: "Accounts", path: "/admin/users", show: canViewCustomers() },
     { label: "Products", hint: "Catalog", path: "/admin/products", show: true },
     { label: "Clinical Products", hint: "Treatments", path: "/admin/clinical-products", show: true },
     { label: "Machines", hint: "Devices", path: "/admin/machines", show: true },
+    { label: "Blog CMS", hint: "SEO Content", path: "/admin/blogs", show: true },
     { label: "Orders", hint: "Fulfillment", path: "/admin/orders", show: true },
     { label: "Contact Us", hint: "Leads", path: "/admin/contact-us", show: canAccessRestrictedSections() },
     { label: "Brands", hint: "Portfolio", path: "/admin/brands", show: true },
@@ -444,6 +454,7 @@ const AdminDashboard = () => {
     { label: "Coupons", hint: "Promotions", path: "/admin/coupons", show: canAccessRestrictedSections() },
     { label: "Image Manager", hint: "Assets", path: "/admin/cloudinary", show: true },
   ];
+  const visibleNavItems = navItems.filter((item) => item.show);
 
   if (loading) {
     return (
@@ -458,31 +469,45 @@ const AdminDashboard = () => {
 
   return (
     <div className="admin-dashboard">
+      <a href="#dashboard-main" className="skip-link">Skip to dashboard content</a>
       <header className="aura-header">
         <div className="aura-header-inner">
           <div>
             <p className="aura-eyebrow">Admin Operations</p>
-            <h1>Commerce Control Room</h1>
+            <h1>Admin Dashboard</h1>
           </div>
           <div className="aura-header-actions">
-            <div className="aura-admin-chip">
+            <button
+              type="button"
+              className="nav-toggle-btn"
+              onClick={() => setMobileNavOpen((prev) => !prev)}
+              aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={mobileNavOpen}
+            >
+              {mobileNavOpen ? "Close Menu" : "Menu"}
+            </button>
+            <div className="aura-admin-chip" aria-label="Current admin profile">
               <strong>{adminData?.name || "Admin"}</strong>
               <span>{adminData?.role || "Unknown role"}</span>
             </div>
-            <button onClick={handleLogout} className="logout-btn">Logout</button>
+            <button type="button" onClick={handleLogout} className="logout-btn" aria-label="Logout from admin dashboard">
+              Logout
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="aura-shell">
-        <aside className="aura-sidebar glass-panel">
+      <main id="dashboard-main" className="aura-shell" role="main">
+        <aside className={`aura-sidebar glass-panel${mobileNavOpen ? " mobile-open" : ""}`}>
           <p className="aura-kicker">Navigation</p>
-          <nav className="aura-nav">
-            {navItems.filter((item) => item.show).map((item) => (
+          <nav className="aura-nav" aria-label="Admin sections">
+            {visibleNavItems.map((item) => (
               <button
                 key={item.path}
+                type="button"
                 onClick={() => navigateTo(item.path)}
-                className={`aura-nav-item${item.active ? " active" : ""}`}
+                className={`aura-nav-item${location.pathname === item.path ? " active" : ""}`}
+                aria-current={location.pathname === item.path ? "page" : undefined}
               >
                 <span>{item.label}</span>
                 <small>{item.hint}</small>
@@ -492,7 +517,7 @@ const AdminDashboard = () => {
         </aside>
 
         <section className="aura-content">
-          {error && <div className="error-banner">{error}</div>}
+          {error && <div className="error-banner" role="alert" aria-live="polite">{error}</div>}
 
           <section className="aura-hero glass-panel">
             <div className="aura-hero-copy">
@@ -518,8 +543,8 @@ const AdminDashboard = () => {
                   : `${orderDelta >= 0 ? "+" : ""}${orderDeltaPercent}% change`}
               </strong>
               <div className="hero-actions">
-                <button onClick={() => navigateTo("/admin/orders")} className="action-btn primary">Review Orders</button>
-                <button onClick={() => navigateTo("/admin/products/new")} className="action-btn">Add Product</button>
+                <button type="button" onClick={() => navigateTo("/admin/orders")} className="action-btn primary">Review Orders</button>
+                <button type="button" onClick={() => navigateTo("/admin/blogs/new")} className="action-btn">Add Blog</button>
               </div>
             </div>
           </section>
@@ -628,7 +653,8 @@ const AdminDashboard = () => {
               <span className="meta-pill">{recentOrders.orders.length} rows</span>
             </div>
             <div className="table-responsive">
-              <table className="table">
+              <table className="table" aria-label="Recent orders">
+                <caption className="sr-only">Recent orders with invoice, date, payment method, customer, amount and status.</caption>
                 <thead>
                   <tr>
                     <th>Invoice</th>
@@ -663,14 +689,22 @@ const AdminDashboard = () => {
           </section>
         </section>
       </main>
+      {mobileNavOpen && <button type="button" className="mobile-nav-backdrop" aria-label="Close navigation menu" onClick={() => setMobileNavOpen(false)} />}
 
-      <nav className="mobile-dock">
-        <button onClick={() => navigateTo("/admin/dashboard")} className="active">Dashboard</button>
-        <button onClick={() => navigateTo("/admin/orders")}>Orders</button>
-        <button onClick={() => navigateTo("/admin/products")}>Products</button>
-        {canAccessRestrictedSections() && (
-          <button onClick={() => navigateTo("/admin/contact-us")}>Contacts</button>
-        )}
+      <nav className="mobile-dock" aria-label="Quick navigation">
+        <div className="mobile-dock-scroll">
+          {visibleNavItems.map((item) => (
+            <button
+              key={`mobile-${item.path}`}
+              type="button"
+              onClick={() => navigateTo(item.path)}
+              className={location.pathname === item.path ? "active" : ""}
+              aria-current={location.pathname === item.path ? "page" : undefined}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </nav>
     </div>
   );

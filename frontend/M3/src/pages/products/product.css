@@ -106,6 +106,57 @@
 .product-preview-row strong { color: var(--ink); font-size: 13px; text-transform: none; letter-spacing: 0; }
 .status-text { text-transform: capitalize; }
 
+.pricing-live-card {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8fbff 0%, #fdfefe 100%);
+  display: grid;
+  gap: 8px;
+}
+
+.pricing-live-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #475569;
+}
+
+.pricing-live-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pricing-live-item {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.pricing-live-item span {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pricing-live-item strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.pricing-live-item .price-positive {
+  color: #0f766e;
+}
+
 .product-media-card label {
   font-size: 11px;
   text-transform: uppercase;
@@ -500,6 +551,7 @@
     grid-template-columns: 1fr;
   }
 
+  .pricing-live-grid { grid-template-columns: 1fr; }
   .products-summary { grid-template-columns: 1fr; }
   .products-table-wrap { padding: 8px; }
   .products-table { min-width: 680px; }

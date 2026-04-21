@@ -1,5 +1,5 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import React, { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 
 // Lazy-loaded pages to reduce initial bundle
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
@@ -21,6 +21,8 @@ const ClinicalProductList = lazy(() => import("./pages/clinical-products/Clinica
 const ClinicalProductForm = lazy(() => import("./pages/clinical-products/ClinicalProductForm"));
 const MachineList = lazy(() => import("./pages/machines/MachineList"));
 const MachineForm = lazy(() => import("./pages/machines/MachineForm"));
+const BlogList = lazy(() => import("./pages/blogs/BlogList"));
+const BlogForm = lazy(() => import("./pages/blogs/BlogForm"));
 
 const OrderList = lazy(() => import("./pages/orders/OrderList"));
 const OrderDetail = lazy(() => import("./pages/orders/OrderDetail"));
@@ -50,9 +52,22 @@ const RootRedirect = () => {
   return <Navigate to={hasToken ? "/admin/dashboard" : "/admin/login"} replace />;
 };
 
+const AdminTitleManager = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/admin")) {
+      document.title = "NEES Medical Admin";
+    }
+  }, [location.pathname]);
+
+  return null;
+};
+
 const App = () => {
   return (
     <BrowserRouter>
+      <AdminTitleManager />
       <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
         <Routes>
           {/* Root: decide where to go based on auth */}
@@ -96,6 +111,9 @@ const App = () => {
           <Route path="/admin/machines" element={<ProtectedRoute><MachineList /></ProtectedRoute>} />
           <Route path="/admin/machines/new" element={<ProtectedRoute><MachineForm /></ProtectedRoute>} />
           <Route path="/admin/machines/:id" element={<ProtectedRoute><MachineForm /></ProtectedRoute>} />
+          <Route path="/admin/blogs" element={<ProtectedRoute><BlogList /></ProtectedRoute>} />
+          <Route path="/admin/blogs/new" element={<ProtectedRoute><BlogForm /></ProtectedRoute>} />
+          <Route path="/admin/blogs/:id" element={<ProtectedRoute><BlogForm /></ProtectedRoute>} />
 
           {/* Order Management (protected) */}
           <Route path="/admin/orders" element={<ProtectedRoute><OrderList /></ProtectedRoute>} />

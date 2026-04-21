@@ -21,6 +21,13 @@ const emptyProduct = {
   productType: "",
   description: "",
   imageURLs: [],
+  seo: {
+    h1: "",
+    metaTitle: "",
+    metaDescription: "",
+    keywords: [],
+  },
+  faqItems: [{ question: "", answer: "" }],
   bogoOffer: {
     enabled: false,
     label: "Buy 1 Get 1 FREE",
@@ -34,12 +41,36 @@ const normalizeRef = (value) => ({
   id: String(value?.id || "").trim(),
 });
 const normalizeType = (value) => String(value || "").trim().toLowerCase();
+const uniqueStrings = (value) =>
+  Array.from(
+    new Set(
+      (Array.isArray(value) ? value : String(value || "").split(","))
+        .map((entry) => String(entry || "").trim())
+        .filter(Boolean)
+    )
+  );
 const normalizeBogoOffer = (value) => ({
   enabled: Boolean(value?.enabled),
   label: String(value?.label || "Buy 1 Get 1 FREE").trim() || "Buy 1 Get 1 FREE",
   bundleSize: Math.max(1, Number(value?.bundleSize || 2)),
   bundlePrice: Math.max(0, Number(value?.bundlePrice || 0)),
 });
+const normalizeSeo = (value) => ({
+  h1: String(value?.h1 || "").trim(),
+  metaTitle: String(value?.metaTitle || "").trim(),
+  metaDescription: String(value?.metaDescription || "").trim(),
+  keywords: uniqueStrings(value?.keywords || []),
+});
+const normalizeFaqItems = (items) => {
+  const normalized = (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      question: String(item?.question || "").trim(),
+      answer: String(item?.answer || "").trim(),
+    }))
+    .filter((item) => item.question || item.answer);
+
+  return normalized.length > 0 ? normalized : [{ question: "", answer: "" }];
+};
 
 const pickCloudinaryArray = (payload) => {
   if (!payload || typeof payload !== "object") return [];
@@ -73,6 +104,15 @@ const normalizeImageCollection = (images) => {
     normalized.push(image);
   });
   return normalized;
+};
+
+const formatPKR = (value) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "PKR 0.00";
+  return `PKR ${amount.toLocaleString("en-PK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 };
 
 const ProductForm = () => {
@@ -322,6 +362,8 @@ const ProductForm = () => {
           featured: Boolean(payload?.feature ?? payload?.featured ?? false),
           unit: normalizedUnit,
           imageURLs: normalizeImageCollection(payload?.imageURLs),
+          seo: normalizeSeo(payload?.seo),
+          faqItems: normalizeFaqItems(payload?.faqItems),
           bogoOffer: normalizeBogoOffer(payload?.bogoOffer),
         });
         const start = toYMD(payload?.offerDate?.startDate) || "";
@@ -411,6 +453,40 @@ const ProductForm = () => {
         ...normalizeBogoOffer(prev?.bogoOffer),
         [name]: type === "checkbox" ? checked : value,
       },
+    }));
+  };
+
+  const handleSeoChange = (e) => {
+    const { name, value } = e.target;
+    setProduct((prev) => ({
+      ...prev,
+      seo: {
+        ...normalizeSeo(prev?.seo),
+        [name]: value,
+      },
+    }));
+  };
+
+  const addFaqItem = () => {
+    setProduct((prev) => ({
+      ...prev,
+      faqItems: [...normalizeFaqItems(prev?.faqItems), { question: "", answer: "" }],
+    }));
+  };
+
+  const updateFaqItem = (index, field, value) => {
+    setProduct((prev) => ({
+      ...prev,
+      faqItems: normalizeFaqItems(prev?.faqItems).map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item
+      ),
+    }));
+  };
+
+  const removeFaqItem = (index) => {
+    setProduct((prev) => ({
+      ...prev,
+      faqItems: normalizeFaqItems(prev?.faqItems).filter((_, itemIndex) => itemIndex !== index),
     }));
   };
 
@@ -521,6 +597,19 @@ const ProductForm = () => {
 
   const selectedImageCount = Object.keys(selectedImageUrls).filter((url) => selectedImageUrls[url]).length;
   const isSelectingMainImage = imageManagerTarget === "main";
+  const parsedPrice = Number(product.price);
+  const parsedDiscount = Number(product.discount);
+  const parsedQuantity = Number(product.quantity);
+
+  const basePrice = Number.isFinite(parsedPrice) ? Math.max(0, parsedPrice) : 0;
+  const discountPercent = Number.isFinite(parsedDiscount) ? Math.min(100, Math.max(0, parsedDiscount)) : 0;
+  const quantityUnits = Number.isFinite(parsedQuantity) ? Math.max(0, parsedQuantity) : 0;
+
+  const discountAmountPerUnit = basePrice * (discountPercent / 100);
+  const finalPricePerUnit = Math.max(0, basePrice - discountAmountPerUnit);
+  const totalBeforeDiscount = basePrice * quantityUnits;
+  const totalAfterDiscount = finalPricePerUnit * quantityUnits;
+  const totalSavings = Math.max(0, totalBeforeDiscount - totalAfterDiscount);
 
   const prune = (obj) => {
     if (obj == null || typeof obj !== "object") return obj;
@@ -592,6 +681,15 @@ const ProductForm = () => {
         productType: product.productType,
         description: product.description,
         imageURLs: normalizeImageCollection(product.imageURLs),
+        seo: {
+          h1: product.seo?.h1 || "",
+          metaTitle: product.seo?.metaTitle || "",
+          metaDescription: product.seo?.metaDescription || "",
+          keywords: uniqueStrings(product.seo?.keywords || []),
+        },
+        faqItems: normalizeFaqItems(product.faqItems).filter(
+          (item) => item.question.trim() && item.answer.trim()
+        ),
         bogoOffer: {
           enabled: Boolean(product?.bogoOffer?.enabled),
           label: String(product?.bogoOffer?.label || "Buy 1 Get 1 FREE").trim() || "Buy 1 Get 1 FREE",
@@ -619,6 +717,15 @@ const ProductForm = () => {
         },
         children: product.children || "",
         imageURLs: normalizeImageCollection(product.imageURLs),
+        seo: {
+          h1: product.seo?.h1 || "",
+          metaTitle: product.seo?.metaTitle || "",
+          metaDescription: product.seo?.metaDescription || "",
+          keywords: uniqueStrings(product.seo?.keywords || []),
+        },
+        faqItems: normalizeFaqItems(product.faqItems).filter(
+          (item) => item.question.trim() && item.answer.trim()
+        ),
       };
 
       const resp = await fetch(url, {
@@ -687,7 +794,7 @@ const ProductForm = () => {
               <span className="product-preview-title">{product.title || "Untitled Product"}</span>
               <div className="product-preview-row">
                 <span>Price</span>
-                <strong>{product.price || "0.00"}</strong>
+                <strong>{formatPKR(basePrice)}</strong>
               </div>
               <div className="product-preview-row">
                 <span>Status</span>
@@ -695,11 +802,23 @@ const ProductForm = () => {
               </div>
               <div className="product-preview-row">
                 <span>Discount</span>
-                <strong>{product.discount || 0}%</strong>
+                <strong>{discountPercent}%</strong>
+              </div>
+              <div className="product-preview-row">
+                <span>Discount Amount</span>
+                <strong>{formatPKR(discountAmountPerUnit)}</strong>
+              </div>
+              <div className="product-preview-row">
+                <span>Final Unit Price</span>
+                <strong>{formatPKR(finalPricePerUnit)}</strong>
+              </div>
+              <div className="product-preview-row">
+                <span>Total (After Discount)</span>
+                <strong>{formatPKR(totalAfterDiscount)}</strong>
               </div>
               <div className="product-preview-row">
                 <span>Stock</span>
-                <strong>{product.quantity || 0} units</strong>
+                <strong>{quantityUnits} units</strong>
               </div>
               {Boolean(product?.bogoOffer?.enabled) && (
                 <div className="product-preview-row">
@@ -803,8 +922,40 @@ const ProductForm = () => {
                   <div className="form-cell"><input name="quantity" type="number" placeholder="0" value={product.quantity} onChange={handleChange} /></div>
                 </div>
                 <div className="form-row">
-                  <div className="form-cell">Discount</div>
-                  <div className="form-cell"><input name="discount" type="number" placeholder="0" value={product.discount} onChange={handleChange} /></div>
+                  <div className="form-cell">Discount<span className="subtext">Percentage (%): e.g. 10, 12, 19.5</span></div>
+                  <div className="form-cell">
+                    <input
+                      name="discount"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      placeholder="0"
+                      value={product.discount}
+                      onChange={handleChange}
+                    />
+                    <div className="pricing-live-card" aria-live="polite">
+                      <div className="pricing-live-title">Live Pricing Calculator</div>
+                      <div className="pricing-live-grid">
+                        <div className="pricing-live-item">
+                          <span>Original Price</span>
+                          <strong>{formatPKR(basePrice)}</strong>
+                        </div>
+                        <div className="pricing-live-item">
+                          <span>Discount ({discountPercent}%)</span>
+                          <strong>{formatPKR(discountAmountPerUnit)}</strong>
+                        </div>
+                        <div className="pricing-live-item">
+                          <span>Final Price / Unit</span>
+                          <strong className="price-positive">{formatPKR(finalPricePerUnit)}</strong>
+                        </div>
+                        <div className="pricing-live-item">
+                          <span>Total Savings ({quantityUnits} units)</span>
+                          <strong>{formatPKR(totalSavings)}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -956,6 +1107,111 @@ const ProductForm = () => {
                 <div className="form-row">
                   <div className="form-cell">Description</div>
                   <div className="form-cell"><textarea name="description" placeholder="Describe the product" value={product.description} onChange={handleChange} rows={5} /></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="section appear" style={{ gridColumn: '1 / -1' }}>
+              <div className="section-title">
+                <h3>SEO</h3>
+                <span className="hint">Metadata used by search engines and AI crawlers</span>
+              </div>
+              <div className="form-table">
+                <div className="form-row">
+                  <div className="form-cell">SEO H1</div>
+                  <div className="form-cell">
+                    <input
+                      name="h1"
+                      placeholder="Optional H1 override"
+                      value={product.seo?.h1 || ""}
+                      onChange={handleSeoChange}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-cell">Meta Title</div>
+                  <div className="form-cell">
+                    <input
+                      name="metaTitle"
+                      placeholder="Meta title"
+                      value={product.seo?.metaTitle || ""}
+                      onChange={handleSeoChange}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-cell">Meta Description</div>
+                  <div className="form-cell">
+                    <textarea
+                      name="metaDescription"
+                      placeholder="Meta description"
+                      value={product.seo?.metaDescription || ""}
+                      onChange={handleSeoChange}
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-cell">SEO Keywords</div>
+                  <div className="form-cell">
+                    <input
+                      placeholder="comma separated keywords"
+                      value={(product.seo?.keywords || []).join(", ")}
+                      onChange={(e) =>
+                        setProduct((prev) => ({
+                          ...prev,
+                          seo: {
+                            ...normalizeSeo(prev?.seo),
+                            keywords: uniqueStrings(e.target.value),
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="section appear" style={{ gridColumn: '1 / -1' }}>
+              <div className="section-title">
+                <h3>FAQ</h3>
+                <span className="hint">Visible answers that support product SEO</span>
+              </div>
+              <div className="form-table">
+                <div className="form-row">
+                  <div className="form-cell">FAQ Items</div>
+                  <div className="form-cell">
+                    <button type="button" className="btn secondary" onClick={addFaqItem}>
+                      + Add FAQ
+                    </button>
+                    <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+                      {normalizeFaqItems(product.faqItems).map((item, index) => (
+                        <div key={`faq-${index}`} style={{ display: "grid", gap: 8 }}>
+                          <input
+                            placeholder="Question"
+                            value={item.question}
+                            onChange={(e) => updateFaqItem(index, "question", e.target.value)}
+                          />
+                          <textarea
+                            rows={3}
+                            placeholder="Answer"
+                            value={item.answer}
+                            onChange={(e) => updateFaqItem(index, "answer", e.target.value)}
+                          />
+                          <div className="actions">
+                            <button
+                              type="button"
+                              className="btn ghost"
+                              onClick={() => removeFaqItem(index)}
+                              disabled={normalizeFaqItems(product.faqItems).length === 1}
+                            >
+                              Remove FAQ
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

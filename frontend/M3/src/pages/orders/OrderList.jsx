@@ -10,6 +10,7 @@ const OrderList = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [errorDebug, setErrorDebug] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [role, setRole] = useState("");
@@ -28,24 +29,71 @@ const OrderList = () => {
     if (Array.isArray(payload)) return payload;
     if (Array.isArray(payload.data)) return payload.data;
     if (Array.isArray(payload.orders)) return payload.orders;
+    if (Array.isArray(payload.order)) return payload.order;
+    if (Array.isArray(payload.results)) return payload.results;
+    if (Array.isArray(payload.orderItems)) return payload.orderItems;
     if (payload.data && Array.isArray(payload.data.orders)) return payload.data.orders;
+    if (payload.data && Array.isArray(payload.data.order)) return payload.data.order;
+    if (payload.data && Array.isArray(payload.data.orderItems)) return payload.data.orderItems;
+    if (payload.result && Array.isArray(payload.result.orders)) return payload.result.orders;
     return [];
   };
 
   const fetchOrders = async () => {
     setLoading(true);
     setError("");
+    setErrorDebug("");
     try {
-      const resp = await fetch(`${API_BASE_URL}/order/admin/orders`, {
-        headers: { ...getAuthHeaders() },
-        cache: "no-store"
-      });
+      const endpoints = [
+        `${API_BASE_URL}/order/admin/orders`,
+        `${API_BASE_URL}/order/orders`
+      ];
 
-      const isJson = resp.headers.get("content-type")?.includes("application/json");
-      const data = isJson ? await resp.json().catch(() => null) : null;
-      if (!resp.ok) throw new Error(data?.message || "Failed to load orders");
+      let loaded = false;
+      let lastError = "Failed to load orders";
+      const attempts = [];
 
-      setOrders(pickArray(data));
+      for (const endpoint of endpoints) {
+        const resp = await fetch(endpoint, {
+          headers: { ...getAuthHeaders() },
+          cache: "no-store"
+        });
+
+        const isJson = resp.headers.get("content-type")?.includes("application/json");
+        const data = isJson ? await resp.json().catch(() => null) : null;
+
+        if (resp.ok) {
+          setOrders(pickArray(data));
+          loaded = true;
+          break;
+        }
+
+        attempts.push({
+          endpoint,
+          status: resp.status,
+          message: data?.message || data?.error || "Request failed"
+        });
+
+        if (resp.status === 404) {
+          lastError = data?.message || "Orders endpoint not found";
+          continue;
+        }
+        if (resp.status === 401) throw new Error("You are not logged in");
+        if (resp.status === 403) throw new Error("You are not authorized to view orders");
+
+        lastError = data?.message || "Failed to load orders";
+      }
+
+      if (!loaded) {
+        setErrorDebug(
+          attempts.length
+            ? attempts
+                .map((attempt) => `[${attempt.status}] ${attempt.endpoint} -> ${attempt.message}`)
+                .join(" | ")
+            : "No endpoint attempt details available."
+        );
+        throw new Error(lastError);
+      }
     } catch (err) {
       setOrders([]);
       setError(err.message || "Failed to load orders");
@@ -256,6 +304,7 @@ const OrderList = () => {
         {error && (
           <div className="error-panel orders-error-panel">
             <p className="error-panel-title">{error}</p>
+            {errorDebug && <p className="subtext">{errorDebug}</p>}
           </div>
         )}
 
