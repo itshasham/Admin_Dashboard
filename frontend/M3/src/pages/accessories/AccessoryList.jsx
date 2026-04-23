@@ -34,6 +34,7 @@ const AccessoryList = () => {
   const [imageFallbackIndex, setImageFallbackIndex] = useState({});
   const [featureSavingIds, setFeatureSavingIds] = useState({});
   const [quickAddLoading, setQuickAddLoading] = useState(false);
+  const [autoImportAttempted, setAutoImportAttempted] = useState(false);
 
   const getAuthHeaders = useCallback(() => {
     try {
@@ -185,35 +186,59 @@ const AccessoryList = () => {
     }
   };
 
-  const handleQuickAddHalfMoon = async () => {
-    setQuickAddLoading(true);
-    setError("");
-    try {
-      const resp = await fetch(`${API_BASE_URL}/accessories/quick-add-half-moon-light`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({
-          sourceUrl: HALF_MOON_SOURCE_URL,
-          price: 15999,
-          parent: "Aesthetic Clinic Accessories",
-          children: "Lighting",
-          quantity: 1,
-          status: "in-stock",
-        }),
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.message || "Failed to auto-add half moon light");
-      await fetchAccessories();
-      alert(data?.message || "Half moon light accessory added successfully");
-    } catch (err) {
-      setError(err?.message || "Failed to auto-add half moon light");
-    } finally {
-      setQuickAddLoading(false);
-    }
-  };
+  const handleQuickAddHalfMoon = useCallback(
+    async ({ silent = false } = {}) => {
+      setQuickAddLoading(true);
+      if (!silent) setError("");
+      try {
+        const resp = await fetch(`${API_BASE_URL}/accessories/quick-add-half-moon-light`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            sourceUrl: HALF_MOON_SOURCE_URL,
+            price: 15999,
+            parent: "Aesthetic Clinic Accessories",
+            children: "Lighting",
+            quantity: 1,
+            status: "in-stock",
+          }),
+        });
+        const rawText = await resp.text();
+        let data = {};
+        try {
+          data = rawText ? JSON.parse(rawText) : {};
+        } catch {
+          data = {};
+        }
+        if (!resp.ok) {
+          throw new Error(
+            data?.message ||
+            data?.error ||
+            (Array.isArray(data?.errorMessages) && data.errorMessages[0]?.message) ||
+            "Failed to auto-add half moon light"
+          );
+        }
+        await fetchAccessories();
+        if (!silent) {
+          alert(data?.message || "Half moon light accessory added successfully");
+        }
+      } catch (err) {
+        if (!silent) setError(err?.message || "Failed to auto-add half moon light");
+      } finally {
+        setQuickAddLoading(false);
+      }
+    },
+    [fetchAccessories, getAuthHeaders]
+  );
+
+  useEffect(() => {
+    if (loading || error || autoImportAttempted || accessories.length > 0) return;
+    setAutoImportAttempted(true);
+    handleQuickAddHalfMoon({ silent: true });
+  }, [accessories.length, autoImportAttempted, error, handleQuickAddHalfMoon, loading]);
 
   if (loading) {
     return (
@@ -235,7 +260,12 @@ const AccessoryList = () => {
           <button className="btn secondary" onClick={() => navigate("/admin/dashboard")} type="button">
             ← Back
           </button>
-          <button className="btn secondary" onClick={handleQuickAddHalfMoon} type="button" disabled={quickAddLoading}>
+          <button
+            className="btn secondary"
+            onClick={() => handleQuickAddHalfMoon({ silent: false })}
+            type="button"
+            disabled={quickAddLoading}
+          >
             {quickAddLoading ? "Importing..." : "Auto Add Half Moon Light (15,999)"}
           </button>
           <button className="btn" onClick={() => navigate("/admin/accessories/new")} type="button">
