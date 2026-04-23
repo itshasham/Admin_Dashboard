@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import "../products/product.css";
 import { API_BASE_URL } from "../../config/api";
 
+const HALF_MOON_SOURCE_URL =
+  "https://khawajaphotos.pk/product/led-hd-m6x-half-moon-shaped-fill-light-3000k-6000k-dimmable-light/";
+
 const pickArray = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
@@ -28,8 +31,9 @@ const AccessoryList = () => {
   const [selectedParent, setSelectedParent] = useState("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [imageErrors, setImageErrors] = useState({});
+  const [imageFallbackIndex, setImageFallbackIndex] = useState({});
   const [featureSavingIds, setFeatureSavingIds] = useState({});
+  const [quickAddLoading, setQuickAddLoading] = useState(false);
 
   const getAuthHeaders = useCallback(() => {
     try {
@@ -58,7 +62,7 @@ const AccessoryList = () => {
       if (!resp.ok) throw new Error(data?.message || "Failed to load accessories");
 
       setAccessories(pickArray(data));
-      setImageErrors({});
+      setImageFallbackIndex({});
     } catch (err) {
       setAccessories([]);
       setError(err?.message || "Failed to load accessories");
@@ -73,7 +77,22 @@ const AccessoryList = () => {
 
   const markImageError = (id) => {
     if (!id) return;
-    setImageErrors((prev) => ({ ...prev, [id]: true }));
+    setImageFallbackIndex((prev) => ({
+      ...prev,
+      [id]: Math.max(0, Number(prev[id] || 0)) + 1,
+    }));
+  };
+
+  const resolveRowImage = (item, id) => {
+    const candidates = Array.from(
+      new Set(
+        [item?.img, ...(Array.isArray(item?.imageURLs) ? item.imageURLs : [])]
+          .map((entry) => String(entry || "").trim())
+          .filter(Boolean)
+      )
+    );
+    const fallbackStep = Math.max(0, Number(imageFallbackIndex[id] || 0));
+    return candidates[fallbackStep] || "";
   };
 
   const parentOptions = useMemo(() => {
@@ -166,6 +185,36 @@ const AccessoryList = () => {
     }
   };
 
+  const handleQuickAddHalfMoon = async () => {
+    setQuickAddLoading(true);
+    setError("");
+    try {
+      const resp = await fetch(`${API_BASE_URL}/accessories/quick-add-half-moon-light`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          sourceUrl: HALF_MOON_SOURCE_URL,
+          price: 15999,
+          parent: "Aesthetic Clinic Accessories",
+          children: "Lighting",
+          quantity: 1,
+          status: "in-stock",
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || "Failed to auto-add half moon light");
+      await fetchAccessories();
+      alert(data?.message || "Half moon light accessory added successfully");
+    } catch (err) {
+      setError(err?.message || "Failed to auto-add half moon light");
+    } finally {
+      setQuickAddLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page-container products-page">
@@ -185,6 +234,9 @@ const AccessoryList = () => {
         <div className="header-side">
           <button className="btn secondary" onClick={() => navigate("/admin/dashboard")} type="button">
             ← Back
+          </button>
+          <button className="btn secondary" onClick={handleQuickAddHalfMoon} type="button" disabled={quickAddLoading}>
+            {quickAddLoading ? "Importing..." : "Auto Add Half Moon Light (15,999)"}
           </button>
           <button className="btn" onClick={() => navigate("/admin/accessories/new")} type="button">
             + Add Accessory
@@ -283,11 +335,8 @@ const AccessoryList = () => {
                 {filteredAccessories.map((item, index) => {
                   const id = item?._id || item?.id;
                   const title = item?.title || "(no title)";
-                  const image =
-                    item?.img ||
-                    (Array.isArray(item?.imageURLs) && item.imageURLs[0]) ||
-                    "";
-                  const showImage = Boolean(image && id && !imageErrors[id]);
+                  const image = resolveRowImage(item, id);
+                  const showImage = Boolean(image);
                   const discount = Math.max(0, Math.min(100, Number(item?.discount) || 0));
                   const price = Number(item?.price) || 0;
                   const finalPrice = Math.max(0, price - (price * discount) / 100);

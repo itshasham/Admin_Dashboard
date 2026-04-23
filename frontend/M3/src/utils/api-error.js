@@ -30,6 +30,7 @@ const FRIENDLY_FIELD_LABELS = {
   availability: "Availability",
   images: "Images",
   slug: "Slug",
+  sourceUrl: "Source URL",
   excerpt: "Excerpt",
   content: "Content",
   featuredImage: "Featured image",
