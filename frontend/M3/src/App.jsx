@@ -21,6 +21,8 @@ const ClinicalProductList = lazy(() => import("./pages/clinical-products/Clinica
 const ClinicalProductForm = lazy(() => import("./pages/clinical-products/ClinicalProductForm"));
 const MachineList = lazy(() => import("./pages/machines/MachineList"));
 const MachineForm = lazy(() => import("./pages/machines/MachineForm"));
+const AccessoryList = lazy(() => import("./pages/accessories/AccessoryList"));
+const AccessoryForm = lazy(() => import("./pages/accessories/AccessoryForm"));
 const BlogList = lazy(() => import("./pages/blogs/BlogList"));
 const BlogForm = lazy(() => import("./pages/blogs/BlogForm"));
 
@@ -111,6 +113,9 @@ const App = () => {
           <Route path="/admin/machines" element={<ProtectedRoute><MachineList /></ProtectedRoute>} />
           <Route path="/admin/machines/new" element={<ProtectedRoute><MachineForm /></ProtectedRoute>} />
           <Route path="/admin/machines/:id" element={<ProtectedRoute><MachineForm /></ProtectedRoute>} />
+          <Route path="/admin/accessories" element={<ProtectedRoute><AccessoryList /></ProtectedRoute>} />
+          <Route path="/admin/accessories/new" element={<ProtectedRoute><AccessoryForm /></ProtectedRoute>} />
+          <Route path="/admin/accessories/:id" element={<ProtectedRoute><AccessoryForm /></ProtectedRoute>} />
           <Route path="/admin/blogs" element={<ProtectedRoute><BlogList /></ProtectedRoute>} />
           <Route path="/admin/blogs/new" element={<ProtectedRoute><BlogForm /></ProtectedRoute>} />
           <Route path="/admin/blogs/:id" element={<ProtectedRoute><BlogForm /></ProtectedRoute>} />

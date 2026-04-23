@@ -446,6 +446,7 @@ const AdminDashboard = () => {
     { label: "Products", hint: "Catalog", path: "/admin/products", show: true },
     { label: "Clinical Products", hint: "Treatments", path: "/admin/clinical-products", show: true },
     { label: "Machines", hint: "Devices", path: "/admin/machines", show: true },
+    { label: "Accessories", hint: "Clinic Gear", path: "/admin/accessories", show: true },
     { label: "Blog CMS", hint: "SEO Content", path: "/admin/blogs", show: true },
     { label: "Orders", hint: "Fulfillment", path: "/admin/orders", show: true },
     { label: "Contact Us", hint: "Leads", path: "/admin/contact-us", show: canAccessRestrictedSections() },
