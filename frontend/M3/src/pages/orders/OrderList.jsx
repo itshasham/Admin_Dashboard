@@ -116,6 +116,16 @@ const OrderList = () => {
       }
 
       if (!loaded) {
+        if (authFailureMessage) {
+          setErrorDebug(
+            attempts.length
+              ? attempts
+                  .map((attempt) => `[${attempt.status}] ${attempt.endpoint} -> ${attempt.message}`)
+                  .join(" | ")
+              : "No endpoint attempt details available."
+          );
+          throw new Error(authFailureMessage);
+        }
         if (anySuccess) {
           setOrders([]);
           setError("");

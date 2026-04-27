@@ -396,6 +396,9 @@ const AdminDashboard = () => {
         }
 
         if (!loaded) {
+          if (authFailureMessage) {
+            throw new Error(authFailureMessage);
+          }
           if (!anySuccess) {
             throw new Error(authFailureMessage || lastError);
           }
