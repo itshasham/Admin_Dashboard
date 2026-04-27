@@ -44,47 +44,90 @@ const OrderList = () => {
     setError("");
     setErrorDebug("");
     try {
-      const endpoints = [
-        `${API_BASE_URL}/order/admin/orders`,
-        `${API_BASE_URL}/order/orders`
+      const endpointGroups = [
+        {
+          name: "admin",
+          useAuth: true,
+          endpoints: [
+            `${API_BASE_URL}/order/admin/orders`,
+            `${API_BASE_URL}/order/orders`
+          ]
+        },
+        {
+          name: "fallback",
+          useAuth: false,
+          endpoints: [
+            `${API_BASE_URL}/user-order/dashboard-recent-order`
+          ]
+        }
       ];
 
       let loaded = false;
+      let anySuccess = false;
       let lastError = "Failed to load orders";
+      let authFailureMessage = "";
       const attempts = [];
 
-      for (const endpoint of endpoints) {
-        const resp = await fetch(endpoint, {
-          headers: { ...getAuthHeaders() },
-          cache: "no-store"
-        });
+      for (const group of endpointGroups) {
+        for (const endpoint of group.endpoints) {
+          const resp = await fetch(endpoint, {
+            headers: group.useAuth ? { ...getAuthHeaders() } : {},
+            cache: "no-store"
+          });
 
-        const isJson = resp.headers.get("content-type")?.includes("application/json");
-        const data = isJson ? await resp.json().catch(() => null) : null;
+          const isJson = resp.headers.get("content-type")?.includes("application/json");
+          const data = isJson ? await resp.json().catch(() => null) : null;
 
-        if (resp.ok) {
-          setOrders(pickArray(data));
-          loaded = true;
-          break;
+          if (resp.ok) {
+            anySuccess = true;
+            const rows = pickArray(data);
+            if (rows.length > 0) {
+              setOrders(rows);
+              loaded = true;
+              break;
+            }
+            attempts.push({
+              endpoint,
+              status: resp.status,
+              message: "Request succeeded but returned 0 orders"
+            });
+            continue;
+          }
+
+          attempts.push({
+            endpoint,
+            status: resp.status,
+            message: data?.message || data?.error || "Request failed"
+          });
+
+          if (group.useAuth && resp.status === 401 && !authFailureMessage) {
+            authFailureMessage = "You are not logged in";
+          }
+          if (group.useAuth && resp.status === 403 && !authFailureMessage) {
+            authFailureMessage = "You are not authorized to view orders";
+          }
+          if (resp.status === 404) {
+            lastError = data?.message || "Orders endpoint not found";
+            continue;
+          }
+          lastError = data?.message || data?.error || "Failed to load orders";
         }
-
-        attempts.push({
-          endpoint,
-          status: resp.status,
-          message: data?.message || data?.error || "Request failed"
-        });
-
-        if (resp.status === 404) {
-          lastError = data?.message || "Orders endpoint not found";
-          continue;
-        }
-        if (resp.status === 401) throw new Error("You are not logged in");
-        if (resp.status === 403) throw new Error("You are not authorized to view orders");
-
-        lastError = data?.message || "Failed to load orders";
+        if (loaded) break;
       }
 
       if (!loaded) {
+        if (anySuccess) {
+          setOrders([]);
+          setError("");
+          setErrorDebug(
+            attempts.length
+              ? attempts
+                  .map((attempt) => `[${attempt.status}] ${attempt.endpoint} -> ${attempt.message}`)
+                  .join(" | ")
+              : "All endpoints returned 0 orders."
+          );
+          return;
+        }
         setErrorDebug(
           attempts.length
             ? attempts
@@ -92,7 +135,7 @@ const OrderList = () => {
                 .join(" | ")
             : "No endpoint attempt details available."
         );
-        throw new Error(lastError);
+        throw new Error(authFailureMessage || lastError);
       }
     } catch (err) {
       setOrders([]);

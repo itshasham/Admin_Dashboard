@@ -177,6 +177,7 @@ const AdminDashboard = () => {
   const [adminData, setAdminData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [errorDebug, setErrorDebug] = useState("");
 
   const [amounts, setAmounts] = useState({
     todayOrderAmount: 0,
@@ -252,18 +253,30 @@ const AdminDashboard = () => {
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
+        setErrorDebug("");
         const pickOrders = (payload) => {
-          if (!payload) return [];
-          if (Array.isArray(payload)) return payload;
-          if (Array.isArray(payload?.data)) return payload.data;
-          if (Array.isArray(payload?.orders)) return payload.orders;
-          if (Array.isArray(payload?.order)) return payload.order;
-          if (Array.isArray(payload?.results)) return payload.results;
-          if (Array.isArray(payload?.orderItems)) return payload.orderItems;
-          if (payload?.data && Array.isArray(payload.data.orders)) return payload.data.orders;
-          if (payload?.data && Array.isArray(payload.data.order)) return payload.data.order;
-          if (payload?.data && Array.isArray(payload.data.orderItems)) return payload.data.orderItems;
-          if (payload?.result && Array.isArray(payload.result.orders)) return payload.result.orders;
+          const visited = new Set();
+          const queue = [payload];
+
+          while (queue.length) {
+            const current = queue.shift();
+            if (!current || typeof current !== "object") continue;
+            if (visited.has(current)) continue;
+            visited.add(current);
+
+            if (Array.isArray(current)) return current;
+
+            if (Array.isArray(current?.data)) return current.data;
+            if (Array.isArray(current?.orders)) return current.orders;
+            if (Array.isArray(current?.order)) return current.order;
+            if (Array.isArray(current?.results)) return current.results;
+            if (Array.isArray(current?.orderItems)) return current.orderItems;
+
+            Object.values(current).forEach((value) => {
+              if (value && typeof value === "object") queue.push(value);
+            });
+          }
+
           return [];
         };
         const toAmount = (value) => {
@@ -315,41 +328,78 @@ const AdminDashboard = () => {
           const raw = pickOrderDate(order);
           return parseDate(raw) || 0;
         };
-        const endpoints = [
-          `${API_BASE_URL}/order/admin/orders`,
-          `${API_BASE_URL}/order/orders`,
+        const endpointGroups = [
+          {
+            name: "admin",
+            useAuth: true,
+            endpoints: [
+              `${API_BASE_URL}/order/admin/orders`,
+              `${API_BASE_URL}/order/orders`,
+            ],
+          },
+          {
+            name: "fallback",
+            useAuth: false,
+            endpoints: [
+              `${API_BASE_URL}/user-order/dashboard-recent-order`,
+            ],
+          },
         ];
         let orders = [];
         let loaded = false;
         let lastError = "Failed to load orders";
+        let authFailureMessage = "";
+        let anySuccess = false;
+        const attempts = [];
 
-        for (const endpoint of endpoints) {
-          const ordersResp = await fetch(endpoint, {
-            headers: { ...getAuthHeaders() },
-            cache: "no-store",
-          });
-          const ordersJson = (ordersResp.headers.get("content-type") || "").includes("application/json")
-            ? await ordersResp.json().catch(() => null)
-            : null;
+        for (const group of endpointGroups) {
+          for (const endpoint of group.endpoints) {
+            const ordersResp = await fetch(endpoint, {
+              headers: group.useAuth ? { ...getAuthHeaders() } : {},
+              cache: "no-store",
+            });
+            const ordersJson = (ordersResp.headers.get("content-type") || "").includes("application/json")
+              ? await ordersResp.json().catch(() => null)
+              : null;
 
-          if (ordersResp.ok) {
-            orders = pickOrders(ordersJson).sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a));
-            loaded = true;
-            break;
+            if (ordersResp.ok) {
+              anySuccess = true;
+              const candidateOrders = pickOrders(ordersJson).sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a));
+              if (candidateOrders.length > 0) {
+                orders = candidateOrders;
+                loaded = true;
+                break;
+              }
+              attempts.push({
+                endpoint,
+                status: ordersResp.status,
+                message: "Request succeeded but returned 0 orders",
+              });
+              continue;
+            }
+
+            if (group.useAuth && ordersResp.status === 401 && !authFailureMessage) {
+              authFailureMessage = "Your admin session expired. Please login again.";
+            }
+            if (group.useAuth && ordersResp.status === 403 && !authFailureMessage) {
+              authFailureMessage = "You are not authorized to access order metrics.";
+            }
+
+            lastError = ordersJson?.message || "Failed to load orders";
+            attempts.push({
+              endpoint,
+              status: ordersResp.status,
+              message: ordersJson?.message || ordersJson?.error || "Request failed",
+            });
           }
-
-          if (ordersResp.status === 401) {
-            throw new Error("Your admin session expired. Please login again.");
-          }
-          if (ordersResp.status === 403) {
-            throw new Error("You are not authorized to access order metrics.");
-          }
-
-          lastError = ordersJson?.message || "Failed to load orders";
+          if (loaded) break;
         }
 
         if (!loaded) {
-          throw new Error(lastError);
+          if (!anySuccess) {
+            throw new Error(authFailureMessage || lastError);
+          }
+          orders = [];
         }
 
         const now = new Date();
@@ -466,8 +516,14 @@ const AdminDashboard = () => {
           totalOrder: orders.length,
         });
         setError("");
+        setErrorDebug(
+          attempts.length
+            ? attempts.map((a) => `[${a.status}] ${a.endpoint} -> ${a.message}`).join(" | ")
+            : ""
+        );
       } catch (err) {
         setError(err?.message || "Failed to load dashboard metrics");
+        setErrorDebug("");
       }
     };
     fetchDashboard();
@@ -589,7 +645,12 @@ const AdminDashboard = () => {
         </aside>
 
         <section className="aura-content">
-          {error && <div className="error-banner" role="alert" aria-live="polite">{error}</div>}
+          {error && (
+            <div className="error-banner" role="alert" aria-live="polite">
+              {error}
+              {errorDebug ? <small style={{ display: "block", marginTop: "6px" }}>{errorDebug}</small> : null}
+            </div>
+          )}
 
           <section className="aura-hero glass-panel">
             <div className="aura-hero-copy">
