@@ -257,9 +257,23 @@ const AdminDashboard = () => {
           if (Array.isArray(payload)) return payload;
           if (Array.isArray(payload?.data)) return payload.data;
           if (Array.isArray(payload?.orders)) return payload.orders;
+          if (Array.isArray(payload?.order)) return payload.order;
+          if (Array.isArray(payload?.results)) return payload.results;
+          if (Array.isArray(payload?.orderItems)) return payload.orderItems;
+          if (payload?.data && Array.isArray(payload.data.orders)) return payload.data.orders;
+          if (payload?.data && Array.isArray(payload.data.order)) return payload.data.order;
+          if (payload?.data && Array.isArray(payload.data.orderItems)) return payload.data.orderItems;
+          if (payload?.result && Array.isArray(payload.result.orders)) return payload.result.orders;
           return [];
         };
         const toAmount = (value) => {
+          if (value === null || value === undefined) return 0;
+          if (typeof value === "string") {
+            const normalized = value.replace(/[, ]+/g, "").trim();
+            if (!normalized) return 0;
+            const parsedFromString = Number(normalized);
+            return Number.isFinite(parsedFromString) ? parsedFromString : 0;
+          }
           const parsed = Number(value);
           return Number.isFinite(parsed) ? parsed : 0;
         };
@@ -267,20 +281,77 @@ const AdminDashboard = () => {
           const parsed = Date.parse(value);
           return Number.isFinite(parsed) ? parsed : null;
         };
+        const pickOrderAmount = (order) => {
+          const directAmount = toAmount(
+            order?.totalAmount ??
+            order?.total ??
+            order?.totalPrice ??
+            order?.amount ??
+            order?.grandTotal
+          );
+          if (directAmount > 0) return directAmount;
+
+          const fallbackAmount = toAmount(order?.subTotal) + toAmount(order?.shippingCost) - toAmount(order?.discount);
+          return fallbackAmount > 0 ? fallbackAmount : 0;
+        };
+        const pickOrderDate = (order) =>
+          order?.createdAt ||
+          order?.created_at ||
+          order?.updatedAt ||
+          order?.updated_at ||
+          order?.date ||
+          order?.orderDate ||
+          null;
+        const pickPaymentMethod = (order) =>
+          String(
+            order?.paymentMethod ||
+            order?.payment_method ||
+            order?.paymentType ||
+            order?.payment?.method ||
+            order?.payment?.type ||
+            ""
+          ).toLowerCase();
         const getOrderTimestamp = (order) => {
-          const raw = order?.createdAt || order?.updatedAt;
+          const raw = pickOrderDate(order);
           return parseDate(raw) || 0;
         };
-        const ordersResp = await fetch(`${API_BASE_URL}/order/orders`, {
-          headers: { ...getAuthHeaders() },
-          cache: "no-store",
-        });
-        const ordersJson = (ordersResp.headers.get("content-type") || "").includes("application/json")
-          ? await ordersResp.json()
-          : {};
-        if (!ordersResp.ok) throw new Error(ordersJson?.message || "Failed to load orders");
+        const endpoints = [
+          `${API_BASE_URL}/order/admin/orders`,
+          `${API_BASE_URL}/order/orders`,
+        ];
+        let orders = [];
+        let loaded = false;
+        let lastError = "Failed to load orders";
 
-        const orders = pickOrders(ordersJson).sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a));
+        for (const endpoint of endpoints) {
+          const ordersResp = await fetch(endpoint, {
+            headers: { ...getAuthHeaders() },
+            cache: "no-store",
+          });
+          const ordersJson = (ordersResp.headers.get("content-type") || "").includes("application/json")
+            ? await ordersResp.json().catch(() => null)
+            : null;
+
+          if (ordersResp.ok) {
+            orders = pickOrders(ordersJson).sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a));
+            loaded = true;
+            break;
+          }
+
+          if (ordersResp.status === 401) {
+            throw new Error("Your admin session expired. Please login again.");
+          }
+          if (ordersResp.status === 403) {
+            throw new Error("You are not authorized to access order metrics.");
+          }
+
+          lastError = ordersJson?.message || "Failed to load orders";
+        }
+
+        if (!loaded) {
+          throw new Error(lastError);
+        }
+
         const now = new Date();
         const todayStart = new Date(now);
         todayStart.setHours(0, 0, 0, 0);
@@ -309,11 +380,11 @@ const AdminDashboard = () => {
         const categoryMap = new Map();
 
         for (const order of orders) {
-          const total = toAmount(order?.totalAmount);
+          const total = pickOrderAmount(order);
           totalOrderAmount += total;
 
-          const createdTs = parseDate(order?.createdAt || order?.updatedAt);
-          const updatedDateIso = toISODate(order?.updatedAt || order?.createdAt || new Date());
+          const createdTs = parseDate(pickOrderDate(order));
+          const updatedDateIso = toISODate(pickOrderDate(order) || new Date());
           const salesRow = salesMap.get(updatedDateIso);
           if (salesRow) {
             salesRow.total += total;
@@ -329,7 +400,7 @@ const AdminDashboard = () => {
             if (createdAt >= todayStart && createdAt < tomorrowStart) {
               todayOrderAmount += total;
               todayCount += 1;
-              const payment = String(order?.paymentMethod || "").toLowerCase();
+              const payment = pickPaymentMethod(order);
               if (payment.includes("cod") || payment.includes("cash")) {
                 todayCashPaymentAmount += total;
               } else {
@@ -337,7 +408,7 @@ const AdminDashboard = () => {
               }
             } else if (createdAt >= yesterdayStart && createdAt < todayStart) {
               yesterdayOrderAmount += total;
-              const payment = String(order?.paymentMethod || "").toLowerCase();
+              const payment = pickPaymentMethod(order);
               if (payment.includes("cod") || payment.includes("cash")) {
                 yesterDayCashPaymentAmount += total;
               } else {
@@ -395,8 +466,8 @@ const AdminDashboard = () => {
           totalOrder: orders.length,
         });
         setError("");
-      } catch {
-        setError("Failed to load dashboard metrics");
+      } catch (err) {
+        setError(err?.message || "Failed to load dashboard metrics");
       }
     };
     fetchDashboard();
