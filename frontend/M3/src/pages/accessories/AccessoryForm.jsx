@@ -323,7 +323,7 @@ const AccessoryForm = () => {
     setAccessory((prev) => ({
       ...prev,
       imageURLs: normalizeImageUrls([...(prev.imageURLs || []), ...normalized]),
-      img: prev.img || normalized[0] || "",
+      img: prev.img || (prev.imageURLs || [])[0] || normalized[0] || "",
     }));
   };
 
@@ -459,7 +459,7 @@ const AccessoryForm = () => {
     }
 
     const images = normalizeImageUrls(accessory.imageURLs);
-    const mainImage = String(accessory.img || "").trim() || images[0] || "";
+    const mainImage = images[0] || String(accessory.img || "").trim() || "";
 
     const payload = {
       img: mainImage,
@@ -478,7 +478,7 @@ const AccessoryForm = () => {
       status: accessory.status || "in-stock",
       details: accessory.details || accessory.description,
       description: accessory.description || accessory.details,
-      imageURLs: normalizeImageUrls([mainImage, ...images]),
+      imageURLs: normalizeImageUrls(images.length ? images : [mainImage]),
       videoURLs: normalizeVideoUrls(accessory.videoURLs),
       tags: uniqueStrings(accessory.tags || []),
       seo: {
@@ -622,7 +622,7 @@ const AccessoryForm = () => {
                   <button
                     type="button"
                     className="btn ghost"
-                    onClick={() => setAccessory((prev) => ({ ...prev, imageURLs: [] }))}
+                    onClick={() => setAccessory((prev) => ({ ...prev, img: "", imageURLs: [] }))}
                   >
                     Clear All
                   </button>
