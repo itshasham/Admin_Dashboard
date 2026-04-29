@@ -316,15 +316,25 @@ const AccessoryForm = () => {
     }));
   };
 
-  const mergeImages = (urls) => {
+  const mergeImages = (urls, options = {}) => {
+    const { prepend = false, replace = false } = options;
     const normalized = normalizeImageUrls(urls);
     if (!normalized.length) return;
 
-    setAccessory((prev) => ({
-      ...prev,
-      imageURLs: normalizeImageUrls([...(prev.imageURLs || []), ...normalized]),
-      img: prev.img || (prev.imageURLs || [])[0] || normalized[0] || "",
-    }));
+    setAccessory((prev) => {
+      const currentImages = normalizeImageUrls(prev.imageURLs || []);
+      const nextImages = replace
+        ? normalized
+        : prepend
+          ? normalizeImageUrls([...normalized, ...currentImages])
+          : normalizeImageUrls([...currentImages, ...normalized]);
+
+      return {
+        ...prev,
+        imageURLs: nextImages,
+        img: nextImages[0] || "",
+      };
+    });
   };
 
   const addImage = () => {
@@ -342,10 +352,9 @@ const AccessoryForm = () => {
   const removeImage = (index) => {
     setAccessory((prev) => {
       const nextImages = (prev.imageURLs || []).filter((_, idx) => idx !== index);
-      const nextMainImage = prev.img && prev.img === prev.imageURLs?.[index] ? nextImages[0] || "" : prev.img;
       return {
         ...prev,
-        img: nextMainImage,
+        img: nextImages[0] || "",
         imageURLs: nextImages,
       };
     });
@@ -401,7 +410,7 @@ const AccessoryForm = () => {
       setImageManagerError("Select at least one image.");
       return;
     }
-    mergeImages(urls);
+    mergeImages(urls, { prepend: true });
     closeImageManager();
   };
 
@@ -459,7 +468,9 @@ const AccessoryForm = () => {
     }
 
     const images = normalizeImageUrls(accessory.imageURLs);
-    const mainImage = images[0] || String(accessory.img || "").trim() || "";
+    const preferredMain = String(accessory.img || "").trim();
+    const orderedImages = preferredMain ? normalizeImageUrls([preferredMain, ...images]) : images;
+    const mainImage = orderedImages[0] || "";
 
     const payload = {
       img: mainImage,
@@ -478,7 +489,7 @@ const AccessoryForm = () => {
       status: accessory.status || "in-stock",
       details: accessory.details || accessory.description,
       description: accessory.description || accessory.details,
-      imageURLs: normalizeImageUrls(images.length ? images : [mainImage]),
+      imageURLs: normalizeImageUrls(orderedImages.length ? orderedImages : [mainImage]),
       videoURLs: normalizeVideoUrls(accessory.videoURLs),
       tags: uniqueStrings(accessory.tags || []),
       seo: {
