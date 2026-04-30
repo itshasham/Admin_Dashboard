@@ -2,6 +2,23 @@ import React, { useEffect, useMemo, useState } from "react";
 import "./coupon.css";
 import { API_BASE_URL } from '../../config/api';
 
+const PRODUCT_SCOPE_ALL_NON_CLINICAL = "all-non-clinical-non-accessories";
+
+const formatProductScopeLabel = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === PRODUCT_SCOPE_ALL_NON_CLINICAL) {
+    return "All except clinical & accessories";
+  }
+  if (
+    normalized === "all" ||
+    normalized === "all product" ||
+    normalized === "all products"
+  ) {
+    return "All products";
+  }
+  return value || "-";
+};
+
 const CouponList = () => {
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -262,7 +279,7 @@ const CouponList = () => {
                     <td>{c?.affiliateName || (c?.couponType === "affiliate" ? "Not set" : "—")}</td>
                     <td>{formatPKR(summaryByCode[String(c?.couponCode || "").toUpperCase()]?.affiliateCommissionTotal)}</td>
                     <td>{c?.minimumAmount ?? "-"}</td>
-                    <td>{c?.productType || "-"}</td>
+                    <td>{formatProductScopeLabel(c?.productType)}</td>
                     <td><span className={statusClass(c?.status)}>{c?.status || "-"}</span></td>
                     <td>{fmt(c?.startTime)}</td>
                     <td>{fmt(c?.endTime)}</td>

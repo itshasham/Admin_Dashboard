@@ -3,6 +3,32 @@ import { useParams } from "react-router-dom";
 import "./coupon.css";
 import { API_BASE_URL } from '../../config/api';
 
+const PRODUCT_SCOPE_ALL_NON_CLINICAL = "all-non-clinical-non-accessories";
+const PRODUCT_SCOPE_ALL_PRODUCTS = "all products";
+
+const PRODUCT_SCOPE_OPTIONS = [
+  {
+    value: PRODUCT_SCOPE_ALL_NON_CLINICAL,
+    label: "all products except clinical & accessories",
+  },
+  { value: PRODUCT_SCOPE_ALL_PRODUCTS, label: "all products" },
+];
+
+const formatProductScopeLabel = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === PRODUCT_SCOPE_ALL_NON_CLINICAL) {
+    return "All products except clinical & accessories";
+  }
+  if (
+    normalized === "all" ||
+    normalized === "all product" ||
+    normalized === PRODUCT_SCOPE_ALL_PRODUCTS
+  ) {
+    return "All products";
+  }
+  return value || "All products";
+};
+
 const emptyCoupon = {
   title: "",
   logo: "",
@@ -18,7 +44,7 @@ const emptyCoupon = {
   affiliatePhone: "",
   affiliatePaymentDetails: "",
   minimumAmount: 0,
-  productType: "",
+  productType: PRODUCT_SCOPE_ALL_NON_CLINICAL,
   status: "active",
 };
 
@@ -81,6 +107,30 @@ const CouponForm = () => {
   const [error, setError] = useState("");
   const [productTypes, setProductTypes] = useState([]);
   const [role, setRole] = useState("");
+  const productTypeOptions = useMemo(() => {
+    const optionMap = new Map();
+    PRODUCT_SCOPE_OPTIONS.forEach((opt) => {
+      optionMap.set(String(opt.value).trim().toLowerCase(), opt);
+    });
+    productTypes.forEach((value) => {
+      const cleanValue = String(value || "").trim();
+      if (!cleanValue) return;
+      const key = cleanValue.toLowerCase();
+      if (!optionMap.has(key)) {
+        optionMap.set(key, { value: cleanValue, label: cleanValue });
+      }
+    });
+
+    const currentValue = String(coupon?.productType || "").trim();
+    if (currentValue) {
+      const key = currentValue.toLowerCase();
+      if (!optionMap.has(key)) {
+        optionMap.set(key, { value: currentValue, label: currentValue });
+      }
+    }
+
+    return Array.from(optionMap.values());
+  }, [coupon?.productType, productTypes]);
 
   useEffect(() => {
     try {
@@ -135,8 +185,8 @@ const CouponForm = () => {
       const arr = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
       const types = Array.from(new Set(arr.map(p => (p?.productType || "").trim()).filter(Boolean)));
       setProductTypes(types);
-      if (!isEdit && !coupon.productType && types.length) {
-        setCoupon(prev => ({ ...prev, productType: types[0] }));
+      if (!isEdit && !coupon.productType) {
+        setCoupon(prev => ({ ...prev, productType: PRODUCT_SCOPE_ALL_NON_CLINICAL }));
       }
     } catch {
       // ignore
@@ -172,7 +222,7 @@ const CouponForm = () => {
             affiliatePhone: payload.affiliatePhone || "",
             affiliatePaymentDetails: payload.affiliatePaymentDetails || "",
             minimumAmount: payload.minimumAmount ?? 0,
-            productType: payload.productType || "",
+            productType: payload.productType || PRODUCT_SCOPE_ALL_NON_CLINICAL,
             status: payload.status || "active",
           });
           const sD = new Date(startLocal); setStartH(sD.getHours()); setStartM(sD.getMinutes());
@@ -324,7 +374,7 @@ const CouponForm = () => {
               </div>
               <div>
                 <span>Type</span>
-                <strong>{coupon.productType || "All products"}</strong>
+                <strong>{formatProductScopeLabel(coupon.productType)}</strong>
               </div>
             </div>
           </div>
@@ -432,15 +482,11 @@ const CouponForm = () => {
                 <div className="form-row">
                   <div className="form-cell">Product Type</div>
                   <div className="form-cell">
-                    {productTypes.length ? (
-                      <select name="productType" value={coupon.productType} onChange={handleChange}>
-                        {productTypes.map((pt) => (
-                          <option key={pt} value={pt}>{pt}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input name="productType" value={coupon.productType} onChange={handleChange} placeholder="e.g., electronics" />
-                    )}
+                    <select name="productType" value={coupon.productType} onChange={handleChange}>
+                      {productTypeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="form-row">
