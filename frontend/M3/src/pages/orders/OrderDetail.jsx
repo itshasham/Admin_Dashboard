@@ -821,6 +821,12 @@ const OrderDetail = () => {
             <div className="amount-item"><span className="label">Subtotal</span><span className="value">{order?.subTotal ?? 0}</span></div>
             <div className="amount-item"><span className="label">Shipping</span><span className="value">{order?.shippingCost ?? 0}</span></div>
             <div className="amount-item"><span className="label">Discount</span><span className="value">{order?.discount ?? 0}</span></div>
+            {order?.coupon?.couponCode || order?.couponCode ? (
+              <div className="amount-item"><span className="label">Coupon</span><span className="value">{order?.coupon?.couponCode || order?.couponCode}</span></div>
+            ) : null}
+            {order?.affiliate?.commissionAmount > 0 ? (
+              <div className="amount-item"><span className="label">Affiliate Commission</span><span className="value">{order.affiliate.commissionAmount}</span></div>
+            ) : null}
             <div className="amount-item total"><span className="label">Total</span><span className="value">{order?.totalAmount ?? 0}</span></div>
           </div>
         </div>
@@ -831,6 +837,9 @@ const OrderDetail = () => {
             <li><span>User</span><strong>{order?.user?.name || order?.user?._id || order?.user || "—"}</strong></li>
             <li><span>Items</span><strong>{(order?.cart || []).length}</strong></li>
             <li><span>Status</span><strong className={statusClass}>{displayStatus}</strong></li>
+            {order?.affiliate?.commissionAmount > 0 && (
+              <li><span>Affiliate</span><strong>{order?.affiliate?.name || "Unassigned"}</strong></li>
+            )}
           </ul>
         </div>
       </div>

@@ -8,6 +8,8 @@ const CouponList = () => {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [summaryMonth, setSummaryMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [affiliateSummary, setAffiliateSummary] = useState({ totals: {}, data: [] });
   const [role, setRole] = useState("");
 
   useEffect(() => {
@@ -53,6 +55,20 @@ const CouponList = () => {
     }
   };
 
+  const fetchAffiliateSummary = async (month = summaryMonth) => {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/coupon/affiliate-summary?month=${encodeURIComponent(month)}`, {
+        headers: { ...getAuthHeaders() },
+        cache: "no-store",
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) throw new Error(data?.message || "Failed to load affiliate summary");
+      setAffiliateSummary(data || { totals: {}, data: [] });
+    } catch {
+      setAffiliateSummary({ totals: {}, data: [] });
+    }
+  };
+
   const handleDelete = async (id) => {
     if (!id) return alert("Missing coupon id");
     if (!window.confirm("Delete this coupon?")) return;
@@ -70,6 +86,7 @@ const CouponList = () => {
   };
 
   useEffect(() => { fetchCoupons(); }, []);
+  useEffect(() => { fetchAffiliateSummary(summaryMonth); }, [summaryMonth]);
 
   const filteredCoupons = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -81,6 +98,8 @@ const CouponList = () => {
         coupon?.title,
         coupon?.couponCode,
         coupon?.productType,
+        coupon?.couponType,
+        coupon?.affiliateName,
         coupon?.status,
       ]
         .filter(Boolean)
@@ -99,8 +118,17 @@ const CouponList = () => {
       if (Number.isNaN(end)) return false;
       return end - Date.now() <= 7 * 24 * 60 * 60 * 1000 && end > Date.now();
     }).length;
-    return { active, inactive, expiringSoon };
+    const affiliate = coupons.filter((c) => String(c?.couponType || "").toLowerCase() === "affiliate").length;
+    return { active, inactive, expiringSoon, affiliate };
   }, [coupons]);
+
+  const summaryByCode = useMemo(() => {
+    const map = {};
+    (affiliateSummary?.data || []).forEach((item) => {
+      map[String(item?.couponCode || "").toUpperCase()] = item;
+    });
+    return map;
+  }, [affiliateSummary]);
 
   const fmt = (d) => {
     try { return d ? new Date(d).toLocaleString() : ""; } catch { return d || ""; }
@@ -113,6 +141,15 @@ const CouponList = () => {
     return "status-badge status-neutral";
   };
 
+  const formatPKR = (value) => `Rs ${Number(value || 0).toLocaleString("en-PK")}`;
+
+  const couponOfferLabel = (coupon) => {
+    if (String(coupon?.couponType || "").toLowerCase() === "affiliate") {
+      return `${formatPKR(coupon?.customerDiscountAmount || 100)} customer / ${formatPKR(coupon?.affiliateCommissionAmount || 150)} affiliate`;
+    }
+    return `${coupon?.discountPercentage ?? "-"}%`;
+  };
+
   if (loading) return <div>Loading...</div>;
   if (error) return <div className="error">{error}</div>;
 
@@ -121,7 +158,7 @@ const CouponList = () => {
       <div className="page-header fancy">
         <div>
           <h2>Coupons</h2>
-          <p className="muted">Create timed offers and track active promotions</p>
+          <p className="muted">Create timed offers and track affiliate payouts</p>
         </div>
         <div className="actions">
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
@@ -151,6 +188,11 @@ const CouponList = () => {
           <span className="summary-value">{stats.expiringSoon}</span>
           <span className="summary-chip">7 days</span>
         </div>
+        <div className="summary-card">
+          <span className="summary-label">Affiliate Due</span>
+          <span className="summary-value">{formatPKR(affiliateSummary?.totals?.affiliateCommissionTotal)}</span>
+          <span className="summary-chip">{stats.affiliate} affiliate coupons</span>
+        </div>
       </div>
 
       <div className="table-toolbar">
@@ -173,6 +215,14 @@ const CouponList = () => {
             </button>
           ))}
         </div>
+        <div className="search-input" style={{ maxWidth: 180 }}>
+          <input
+            type="month"
+            value={summaryMonth}
+            onChange={(e) => setSummaryMonth(e.target.value)}
+            title="Affiliate payout month"
+          />
+        </div>
       </div>
 
       <div className="card table-card">
@@ -183,7 +233,9 @@ const CouponList = () => {
                 <th>Logo</th>
                 <th>Title</th>
                 <th>Code</th>
-                <th>Discount %</th>
+                <th>Offer</th>
+                <th>Affiliate</th>
+                <th>Monthly Due</th>
                 <th>Min Amount</th>
                 <th>Product Type</th>
                 <th>Status</th>
@@ -206,7 +258,9 @@ const CouponList = () => {
                     </td>
                     <td>{c?.title || "-"}</td>
                     <td>{c?.couponCode || "-"}</td>
-                    <td>{c?.discountPercentage ?? "-"}</td>
+                    <td>{couponOfferLabel(c)}</td>
+                    <td>{c?.affiliateName || (c?.couponType === "affiliate" ? "Not set" : "—")}</td>
+                    <td>{formatPKR(summaryByCode[String(c?.couponCode || "").toUpperCase()]?.affiliateCommissionTotal)}</td>
                     <td>{c?.minimumAmount ?? "-"}</td>
                     <td>{c?.productType || "-"}</td>
                     <td><span className={statusClass(c?.status)}>{c?.status || "-"}</span></td>

@@ -10,6 +10,13 @@ const emptyCoupon = {
   startTime: "",
   endTime: "",
   discountPercentage: 0,
+  couponType: "standard",
+  customerDiscountAmount: 100,
+  affiliateCommissionAmount: 150,
+  affiliateName: "",
+  affiliateEmail: "",
+  affiliatePhone: "",
+  affiliatePaymentDetails: "",
   minimumAmount: 0,
   productType: "",
   status: "active",
@@ -49,7 +56,7 @@ const toISO = (local) => {
   try { return new Date(local).toISOString(); } catch { return undefined; }
 };
 
-const Clock = ({ hours, minutes }) => {
+  const Clock = ({ hours, minutes }) => {
   const hourDeg = useMemo(() => ((hours % 12) + minutes / 60) * 30, [hours, minutes]);
   const minDeg = useMemo(() => minutes * 6, [minutes]);
   return (
@@ -60,6 +67,11 @@ const Clock = ({ hours, minutes }) => {
     </div>
   );
 };
+
+const formatOffer = (coupon) =>
+  coupon.couponType === "affiliate"
+    ? `Rs ${Number(coupon.customerDiscountAmount || 100)} off`
+    : `${coupon.discountPercentage || 0}% off`;
 
 const CouponForm = () => {
   const { id } = useParams();
@@ -152,6 +164,13 @@ const CouponForm = () => {
             startTime: startLocal,
             endTime: endLocal,
             discountPercentage: payload.discountPercentage ?? 0,
+            couponType: payload.couponType || "standard",
+            customerDiscountAmount: payload.customerDiscountAmount ?? 100,
+            affiliateCommissionAmount: payload.affiliateCommissionAmount ?? 150,
+            affiliateName: payload.affiliateName || "",
+            affiliateEmail: payload.affiliateEmail || "",
+            affiliatePhone: payload.affiliatePhone || "",
+            affiliatePaymentDetails: payload.affiliatePaymentDetails || "",
             minimumAmount: payload.minimumAmount ?? 0,
             productType: payload.productType || "",
             status: payload.status || "active",
@@ -230,6 +249,13 @@ const CouponForm = () => {
         startTime: toISO(coupon.startTime),
         endTime: toISO(coupon.endTime),
         discountPercentage: Number(coupon.discountPercentage) || 0,
+        couponType: coupon.couponType || "standard",
+        customerDiscountAmount: Number(coupon.customerDiscountAmount) || 0,
+        affiliateCommissionAmount: Number(coupon.affiliateCommissionAmount) || 0,
+        affiliateName: coupon.affiliateName,
+        affiliateEmail: coupon.affiliateEmail,
+        affiliatePhone: coupon.affiliatePhone,
+        affiliatePaymentDetails: coupon.affiliatePaymentDetails,
         minimumAmount: Number(coupon.minimumAmount) || 0,
         productType: coupon.productType,
         status: coupon.status,
@@ -266,7 +292,7 @@ const CouponForm = () => {
             </div>
             <div className="coupon-preview-code">{coupon.couponCode || "YOURCODE"}</div>
             <div className="coupon-preview-foot">
-              <span>{coupon.discountPercentage || 0}% off</span>
+              <span>{formatOffer(coupon)}</span>
               <span>Min {coupon.minimumAmount || 0}</span>
             </div>
           </div>
@@ -283,7 +309,7 @@ const CouponForm = () => {
             </div>
             <div className="coupon-preview-code">{coupon.couponCode || "YOURCODE"}</div>
             <div className="coupon-preview-foot">
-              <span>{coupon.discountPercentage || 0}% off</span>
+              <span>{formatOffer(coupon)}</span>
               <span>Min {coupon.minimumAmount || 0}</span>
             </div>
             <div className="coupon-preview-divider" />
@@ -330,6 +356,15 @@ const CouponForm = () => {
               </div>
               <div className="form-table">
                 <div className="form-row">
+                  <div className="form-cell">Coupon Type</div>
+                  <div className="form-cell">
+                    <select name="couponType" value={coupon.couponType} onChange={handleChange}>
+                      <option value="standard">standard</option>
+                      <option value="affiliate">affiliate</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="form-row">
                   <div className="form-cell">Title</div>
                   <div className="form-cell"><input name="title" value={coupon.title} onChange={handleChange} required /></div>
                 </div>
@@ -337,16 +372,56 @@ const CouponForm = () => {
                   <div className="form-cell">Coupon Code</div>
                   <div className="form-cell"><input name="couponCode" value={coupon.couponCode} onChange={handleChange} required /></div>
                 </div>
-                <div className="form-row">
-                  <div className="form-cell">Discount %</div>
-                  <div className="form-cell"><input name="discountPercentage" type="number" value={coupon.discountPercentage} onChange={handleChange} required /></div>
-                </div>
+                {coupon.couponType === "affiliate" ? (
+                  <>
+                    <div className="form-row">
+                      <div className="form-cell">Customer Discount</div>
+                      <div className="form-cell"><input name="customerDiscountAmount" type="number" min="0" value={coupon.customerDiscountAmount} onChange={handleChange} required /></div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-cell">Affiliate Commission</div>
+                      <div className="form-cell"><input name="affiliateCommissionAmount" type="number" min="0" value={coupon.affiliateCommissionAmount} onChange={handleChange} required /></div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="form-row">
+                    <div className="form-cell">Discount %</div>
+                    <div className="form-cell"><input name="discountPercentage" type="number" value={coupon.discountPercentage} onChange={handleChange} required /></div>
+                  </div>
+                )}
                 <div className="form-row">
                   <div className="form-cell">Minimum Amount</div>
                   <div className="form-cell"><input name="minimumAmount" type="number" value={coupon.minimumAmount} onChange={handleChange} /></div>
                 </div>
               </div>
             </div>
+
+            {coupon.couponType === "affiliate" && (
+              <div className="section appear">
+                <div className="section-title">
+                  <h3>Affiliate Person</h3>
+                  <span className="hint">Monthly payout details</span>
+                </div>
+                <div className="form-table">
+                  <div className="form-row">
+                    <div className="form-cell">Name</div>
+                    <div className="form-cell"><input name="affiliateName" value={coupon.affiliateName} onChange={handleChange} required /></div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-cell">Email</div>
+                    <div className="form-cell"><input name="affiliateEmail" type="email" value={coupon.affiliateEmail} onChange={handleChange} /></div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-cell">Phone</div>
+                    <div className="form-cell"><input name="affiliatePhone" value={coupon.affiliatePhone} onChange={handleChange} /></div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-cell">Payment Details</div>
+                    <div className="form-cell"><input name="affiliatePaymentDetails" value={coupon.affiliatePaymentDetails} onChange={handleChange} placeholder="Bank, JazzCash, Easypaisa, notes" /></div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="section appear">
               <div className="section-title">
