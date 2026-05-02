@@ -204,6 +204,7 @@ const AccessoryList = () => {
             children: "Lighting",
             quantity: 1,
             status: "in-stock",
+            preserveExistingPrice: true,
           }),
         });
         const rawText = await resp.text();
@@ -266,7 +267,7 @@ const AccessoryList = () => {
             type="button"
             disabled={quickAddLoading}
           >
-            {quickAddLoading ? "Importing..." : "Auto Add Half Moon Light (15,999)"}
+            {quickAddLoading ? "Importing..." : "Sync Half Moon Light"}
           </button>
           <button className="btn" onClick={() => navigate("/admin/accessories/new")} type="button">
             + Add Accessory

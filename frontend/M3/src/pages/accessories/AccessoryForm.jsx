@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import "../products/product.css";
 import { API_BASE_URL } from "../../config/api";
 import { parseApiError } from "../../utils/api-error";
@@ -144,6 +144,7 @@ const formatPKR = (value) => {
 
 const AccessoryForm = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const isEdit = Boolean(id);
 
   const [accessory, setAccessory] = useState(emptyAccessory);
@@ -531,7 +532,7 @@ const AccessoryForm = () => {
         return;
       }
 
-      window.location.href = "/admin/accessories";
+      navigate("/admin/accessories", { replace: true });
     } catch (err) {
       setError(err?.message || "Failed to save accessory");
       setValidationIssues([]);
@@ -555,7 +556,7 @@ const AccessoryForm = () => {
           <h2>{isEdit ? "Edit Accessory" : "Add Accessory"}</h2>
           <p className="muted">Dedicated accessories section with separate table and media URL support.</p>
         </div>
-        <button className="btn secondary" type="button" onClick={() => (window.location.href = "/admin/accessories")}>
+        <button className="btn secondary" type="button" onClick={() => navigate("/admin/accessories")}>
           ← Back
         </button>
       </div>
@@ -1006,7 +1007,7 @@ const AccessoryForm = () => {
                   <button
                     className="btn secondary"
                     type="button"
-                    onClick={() => (window.location.href = "/admin/accessories")}
+                    onClick={() => navigate("/admin/accessories")}
                   >
                     Cancel
                   </button>
