@@ -54,7 +54,6 @@ const OrderDetail = () => {
     if (
       normalized.includes("cod") ||
       normalized.includes("cash on delivery") ||
-      normalized.includes("cash") ||
       normalized.includes("offline")
     ) {
       return false;
