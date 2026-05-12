@@ -69,6 +69,9 @@ const OrderDetail = () => {
       normalized.includes("easypaisa")
     );
   };
+  const isProofUploadEnabled = () =>
+    String(paymentVerificationStatus || "").toLowerCase() === "verified" &&
+    String(paymentReceivedMethod || "").toLowerCase() === "online";
   const fmtFileSize = (size = 0) => {
     const value = Number(size || 0);
     if (!Number.isFinite(value) || value <= 0) return "—";
@@ -248,7 +251,7 @@ const OrderDetail = () => {
   };
 
   const handleProofInputChange = async (event) => {
-    if (String(paymentVerificationStatus || "").toLowerCase() !== "verified") return;
+    if (!isProofUploadEnabled()) return;
     const files = event?.target?.files;
     await appendProofFiles(files);
     if (paymentProofInputRef.current) {
@@ -259,7 +262,7 @@ const OrderDetail = () => {
   const handleProofDrop = async (event) => {
     event.preventDefault();
     setDraggingProofs(false);
-    if (String(paymentVerificationStatus || "").toLowerCase() !== "verified") return;
+    if (!isProofUploadEnabled()) return;
     await appendProofFiles(event?.dataTransfer?.files || []);
   };
 
@@ -591,7 +594,6 @@ const OrderDetail = () => {
     const verificationStatus = String(paymentVerificationStatus || "pending").toLowerCase() === "verified"
       ? "verified"
       : "pending";
-    const orderRequiresProof = isOnlinePaymentMethod(order?.paymentMethod);
 
     if (verificationStatus === "verified") {
       if (!String(paymentReceivedMethod || "").trim()) {
@@ -602,7 +604,7 @@ const OrderDetail = () => {
         alert("Please enter where payment was received.");
         return;
       }
-      if (orderRequiresProof && paymentProofImages.length === 0) {
+      if (String(paymentReceivedMethod || "").toLowerCase() === "online" && paymentProofImages.length === 0) {
         setPaymentProofError("Payment proof image is required for online payment verification.");
         alert("Please upload at least one payment proof image.");
         return;
@@ -931,8 +933,7 @@ const OrderDetail = () => {
   useEffect(() => {
     const canPastePaymentProof =
       role === "CEO" &&
-      isOnlinePaymentMethod(order?.paymentMethod) &&
-      String(paymentVerificationStatus || "").toLowerCase() === "verified";
+      isProofUploadEnabled();
     if (!canPastePaymentProof) return undefined;
 
     const onPaste = async (event) => {
@@ -949,13 +950,13 @@ const OrderDetail = () => {
 
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [role, order?.paymentMethod, paymentVerificationStatus, paymentProofImages.length]);
+  }, [role, paymentVerificationStatus, paymentReceivedMethod, paymentProofImages.length]);
 
   useEffect(() => {
-    if (String(paymentVerificationStatus || "").toLowerCase() === "verified") return;
+    if (isProofUploadEnabled()) return;
     setDraggingProofs(false);
     setPaymentProofError("");
-  }, [paymentVerificationStatus]);
+  }, [paymentVerificationStatus, paymentReceivedMethod]);
 
   if (role && !["CEO", "Manager", "Admin"].includes(role)) {
     return (
@@ -1035,7 +1036,7 @@ const OrderDetail = () => {
   const orderTrackingLabel = orderIsLocalDelivery ? "N/A (Local Delivery)" : (order?.trackingId || order?.trackingNumber || "—");
   const canViewPaymentVerification = role === "CEO" || role === "Manager";
   const canEditPaymentVerification = role === "CEO";
-  const orderPaymentMethodOnline = isOnlinePaymentMethod(order?.paymentMethod);
+  const canShowProofUploader = isProofUploadEnabled();
   const paymentVerificationStatusLabel =
     String(order?.paymentVerification?.status || "").toLowerCase() === "verified" ||
     order?.paymentVerification?.isVerified === true
@@ -1208,7 +1209,7 @@ const OrderDetail = () => {
                 <p>—</p>
               )}
             </div>
-            {orderPaymentMethodOnline && (
+            {paymentProofCount > 0 && (
               <div className="full">
                 <label>Payment Proof Images</label>
                 {paymentProofCount > 0 ? (
@@ -1286,13 +1287,13 @@ const OrderDetail = () => {
                 value={paymentVerificationNotes}
                 onChange={(e) => setPaymentVerificationNotes(e.target.value)}
               />
-              {orderPaymentMethodOnline && (
+              {canShowProofUploader && (
                 <>
                   <div
-                    className={`payment-proof-dropzone ${draggingProofs ? "is-dragging" : ""} ${paymentVerificationStatus !== "verified" ? "is-disabled" : ""}`}
+                    className={`payment-proof-dropzone ${draggingProofs ? "is-dragging" : ""} ${canShowProofUploader ? "" : "is-disabled"}`}
                     onDragOver={(event) => {
                       event.preventDefault();
-                      if (paymentVerificationStatus !== "verified") return;
+                      if (!canShowProofUploader) return;
                       setDraggingProofs(true);
                     }}
                     onDragLeave={(event) => {
@@ -1308,7 +1309,7 @@ const OrderDetail = () => {
                       multiple
                       onChange={handleProofInputChange}
                       hidden
-                      disabled={paymentVerificationStatus !== "verified" || paymentSaving}
+                      disabled={!canShowProofUploader || paymentSaving}
                     />
                     <p className="payment-proof-title">Payment Verification Screenshot</p>
                     <p className="payment-proof-subtitle">
@@ -1318,7 +1319,7 @@ const OrderDetail = () => {
                       <button
                         type="button"
                         className="btn secondary"
-                        disabled={paymentVerificationStatus !== "verified" || paymentSaving}
+                        disabled={!canShowProofUploader || paymentSaving}
                         onClick={() => paymentProofInputRef.current?.click()}
                       >
                         Choose Images
@@ -1387,7 +1388,7 @@ const OrderDetail = () => {
                   )}
                 </>
               )}
-              {paymentSaving && orderPaymentMethodOnline && (
+              {paymentSaving && canShowProofUploader && (
                 <div className="upload-progress-wrap">
                   <div className="upload-progress-bar">
                     <span style={{ width: `${paymentUploadProgress || 10}%` }} />
