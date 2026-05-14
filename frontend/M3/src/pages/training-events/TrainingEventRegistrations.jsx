@@ -13,6 +13,7 @@ const pickArray = (payload) => {
 };
 
 const statusOptions = ["under_review", "approved", "rejected", "attended"];
+const pmdcStatusOptions = ["all", "pending", "verified", "unverified", "manual_review"];
 const exportFormats = [
   { value: "xlsx", label: "Excel (.xlsx)" },
   { value: "csv", label: "CSV (.csv)" },
@@ -31,6 +32,10 @@ const exportColumnOptions = [
   { key: "event_location", label: "Event Location" },
   { key: "event_name", label: "Event Name" },
   { key: "registration_status", label: "Registration Status" },
+  { key: "pmdc_status", label: "PMDC Status" },
+  { key: "pmdc_reason", label: "Verification Reason" },
+  { key: "pmdc_verified_name", label: "PMDC Verified Name" },
+  { key: "pmdc_similarity", label: "Similarity Score" },
   { key: "registration_date", label: "Registration Date" },
   { key: "approved_date", label: "Approved Date" },
   { key: "approved_by", label: "Approved By" },
@@ -61,6 +66,53 @@ const toDateLabel = (value) => {
   }
 };
 
+const normalizePmdcStatusValue = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "pending";
+  if (["verified", "unverified", "manual_review", "pending"].includes(normalized)) {
+    return normalized;
+  }
+  return "pending";
+};
+
+const pmdcStatusLabel = (value) => {
+  const normalized = normalizePmdcStatusValue(value);
+  if (normalized === "verified") return "PMDC Verified";
+  if (normalized === "unverified") return "PMDC Unverified";
+  if (normalized === "manual_review") return "Manual Review";
+  return "Verification Pending";
+};
+
+const pmdcBadgeStyle = (value) => {
+  const normalized = normalizePmdcStatusValue(value);
+  if (normalized === "verified") {
+    return {
+      background: "#dcfce7",
+      color: "#166534",
+      border: "1px solid #86efac",
+    };
+  }
+  if (normalized === "unverified") {
+    return {
+      background: "#fee2e2",
+      color: "#991b1b",
+      border: "1px solid #fecaca",
+    };
+  }
+  if (normalized === "manual_review") {
+    return {
+      background: "#ede9fe",
+      color: "#5b21b6",
+      border: "1px solid #ddd6fe",
+    };
+  }
+  return {
+    background: "#fef3c7",
+    color: "#92400e",
+    border: "1px solid #fde68a",
+  };
+};
+
 const TrainingEventRegistrations = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -71,6 +123,7 @@ const TrainingEventRegistrations = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [pmdcStatusFilter, setPmdcStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [eventFilter, setEventFilter] = useState("");
   const [eventCityFilter, setEventCityFilter] = useState("");
@@ -85,6 +138,7 @@ const TrainingEventRegistrations = () => {
     exportColumnOptions.map((entry) => entry.key)
   );
   const [exportLoading, setExportLoading] = useState(false);
+  const [stats, setStats] = useState(null);
 
   const getAuthHeaders = () => {
     try {
@@ -127,6 +181,53 @@ const TrainingEventRegistrations = () => {
     }
   };
 
+  const fetchPmdcStats = async () => {
+    try {
+      const url = new URL(`${API_BASE_URL}/training-events/admin/registrations/pmdc-stats`);
+      if (isEventScoped && id) {
+        url.searchParams.set("eventId", id);
+      } else if (eventFilter) {
+        url.searchParams.set("eventId", eventFilter);
+      }
+      const resp = await fetch(url.toString(), {
+        headers: { ...getAuthHeaders() },
+        cache: "no-store",
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) return;
+      setStats(data?.data || null);
+    } catch {
+      setStats(null);
+    }
+  };
+
+  const processVerificationQueueNow = async () => {
+    try {
+      const resp = await fetch(
+        `${API_BASE_URL}/training-events/admin/registrations/process-pmdc`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({}),
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const parsed = parseApiError(data, "Failed to process PMDC queue");
+        throw new Error(parsed.issues.join(" ") || parsed.summary);
+      }
+      await fetchRows();
+      await fetchPmdcStats();
+      const reason = data?.data?.reason ? ` (${data.data.reason})` : "";
+      alert(`PMDC queue processed${reason}`);
+    } catch (err) {
+      alert(err?.message || "Failed to process PMDC queue");
+    }
+  };
+
   const fetchRows = async () => {
     setLoading(true);
     setError("");
@@ -137,6 +238,9 @@ const TrainingEventRegistrations = () => {
       url.searchParams.set("limit", "500");
       if (statusFilter !== "all") {
         url.searchParams.set("status", statusFilter);
+      }
+      if (pmdcStatusFilter !== "all") {
+        url.searchParams.set("pmdcStatus", pmdcStatusFilter);
       }
       if (!isEventScoped && search.trim()) {
         url.searchParams.set("q", search.trim());
@@ -181,13 +285,19 @@ const TrainingEventRegistrations = () => {
 
   useEffect(() => {
     fetchRows();
-  }, [id, statusFilter, eventFilter, eventCityFilter, fromDate, toDate]);
+  }, [id, statusFilter, pmdcStatusFilter, eventFilter, eventCityFilter, fromDate, toDate]);
+
+  useEffect(() => {
+    fetchPmdcStats();
+  }, [id, eventFilter]);
 
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return rows.filter((entry) => {
       const status = normalizeStatusValue(entry?.status || entry?.registration_status);
       if (statusFilter !== "all" && status !== statusFilter) return false;
+      const pmdcStatus = normalizePmdcStatusValue(entry?.pmdc_verification_status);
+      if (pmdcStatusFilter !== "all" && pmdcStatus !== pmdcStatusFilter) return false;
       if (eventFilter && String(entry?.event?._id || entry?.event || "") !== String(eventFilter)) {
         return false;
       }
@@ -221,13 +331,24 @@ const TrainingEventRegistrations = () => {
         entry?.event?.title,
         entry?.event_city,
         entry?.event_location,
+        entry?.pmdc_verification_status,
+        entry?.pmdc_verification_reason,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return hay.includes(needle);
     });
-  }, [rows, search, statusFilter, eventFilter, eventCityFilter, fromDate, toDate]);
+  }, [
+    rows,
+    search,
+    statusFilter,
+    pmdcStatusFilter,
+    eventFilter,
+    eventCityFilter,
+    fromDate,
+    toDate,
+  ]);
 
   const filteredIds = useMemo(
     () => filteredRows.map((entry) => String(entry?._id || "")).filter(Boolean),
@@ -381,6 +502,35 @@ const TrainingEventRegistrations = () => {
     }
   };
 
+  const retryPmdcVerification = async (row) => {
+    if (!row?._id || actionBusyId) return;
+    setActionBusyId(String(row._id));
+    try {
+      const resp = await fetch(
+        `${API_BASE_URL}/training-events/admin/registrations/${row._id}/retry-verification`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const parsed = parseApiError(data, "Failed to retry PMDC verification");
+        throw new Error(parsed.issues.join(" ") || parsed.summary);
+      }
+      updateRow(row._id, data?.data || {});
+      await fetchPmdcStats();
+      alert("PMDC verification retry queued.");
+    } catch (err) {
+      alert(err?.message || "Failed to retry verification");
+    } finally {
+      setActionBusyId("");
+    }
+  };
+
   const toggleExportColumn = (key) => {
     setExportColumns((prev) => {
       if (prev.includes(key)) {
@@ -415,6 +565,9 @@ const TrainingEventRegistrations = () => {
           }
           if (statusFilter !== "all") {
             url.searchParams.set("status", statusFilter);
+          }
+          if (pmdcStatusFilter !== "all") {
+            url.searchParams.set("pmdcStatus", pmdcStatusFilter);
           }
           if (eventCityFilter.trim()) {
             url.searchParams.set("eventCity", eventCityFilter.trim());
@@ -478,11 +631,38 @@ const TrainingEventRegistrations = () => {
           <button className="btn secondary" type="button" onClick={() => navigate("/admin/training-events")}>
             ← Back
           </button>
+          <button className="btn secondary" type="button" onClick={processVerificationQueueNow}>
+            Process PMDC Queue
+          </button>
           <button className="btn" type="button" onClick={() => setShowExportModal(true)}>
             Export Registrations
           </button>
         </div>
       </div>
+
+      {stats ? (
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <strong>PMDC Verification Overview</strong>
+            <small className="muted">Auto-check interval: 30s per request</small>
+          </div>
+          <div className="d-flex flex-wrap gap-2" style={{ marginTop: 10 }}>
+            <span className="badge bg-light text-dark">Total: {stats.total || 0}</span>
+            <span className="badge" style={{ background: "#fef3c7", color: "#92400e" }}>
+              Pending: {stats.pending || 0}
+            </span>
+            <span className="badge" style={{ background: "#dcfce7", color: "#166534" }}>
+              Verified: {stats.verified || 0}
+            </span>
+            <span className="badge" style={{ background: "#fee2e2", color: "#991b1b" }}>
+              Unverified: {stats.unverified || 0}
+            </span>
+            <span className="badge" style={{ background: "#ede9fe", color: "#5b21b6" }}>
+              Manual Review: {stats.manual_review || 0}
+            </span>
+          </div>
+        </section>
+      ) : null}
 
       {error ? (
         <div className="error-panel">
@@ -536,6 +716,23 @@ const TrainingEventRegistrations = () => {
               </option>
             ))}
           </select>
+          <label htmlFor="event-registration-pmdc-status">PMDC</label>
+          <select
+            id="event-registration-pmdc-status"
+            value={pmdcStatusFilter}
+            onChange={(event) => setPmdcStatusFilter(event.target.value)}
+          >
+            {pmdcStatusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status === "all"
+                  ? "All"
+                  : status
+                      .split("_")
+                      .map((item) => item.charAt(0).toUpperCase() + item.slice(1))
+                      .join(" ")}
+              </option>
+            ))}
+          </select>
           <label htmlFor="event-registration-from">From</label>
           <input
             id="event-registration-from"
@@ -558,6 +755,7 @@ const TrainingEventRegistrations = () => {
             onClick={() => {
               setSearch("");
               setStatusFilter("all");
+              setPmdcStatusFilter("all");
               setEventFilter("");
               setEventCityFilter("");
               setFromDate("");
@@ -597,6 +795,7 @@ const TrainingEventRegistrations = () => {
                   <th>Doctor</th>
                   <th>Reg No.</th>
                   <th>PMDC</th>
+                  <th>PMDC Verification</th>
                   <th>Phone / Email</th>
                   <th>Clinic</th>
                   <th>Registered At</th>
@@ -631,6 +830,37 @@ const TrainingEventRegistrations = () => {
                       <strong>{row?.registration_number || row?.registrationNumber || "-"}</strong>
                     </td>
                     <td>{row?.pmdcNumber || "-"}</td>
+                    <td>
+                      <span
+                        style={{
+                          ...pmdcBadgeStyle(row?.pmdc_verification_status),
+                          display: "inline-block",
+                          borderRadius: 999,
+                          padding: "4px 10px",
+                          fontSize: 12,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {pmdcStatusLabel(row?.pmdc_verification_status)}
+                      </span>
+                      <div style={{ marginTop: 6 }}>
+                        <small className="muted">
+                          {row?.pmdc_verification_reason || "Verification pending"}
+                        </small>
+                      </div>
+                      {typeof row?.verification_similarity_score === "number" ? (
+                        <div>
+                          <small className="muted">
+                            Similarity: {(row.verification_similarity_score * 100).toFixed(1)}%
+                          </small>
+                        </div>
+                      ) : null}
+                      {row?.pmdc_verified_name ? (
+                        <div>
+                          <small className="muted">Matched: {row.pmdc_verified_name}</small>
+                        </div>
+                      ) : null}
+                    </td>
                     <td>
                       <div>{row?.phoneNumber || "-"}</div>
                       <small className="muted">{row?.emailAddress || "-"}</small>
@@ -673,6 +903,16 @@ const TrainingEventRegistrations = () => {
                           style={{ minWidth: 54, color: "#b91c1c", borderColor: "#fecaca" }}
                         >
                           ❌
+                        </button>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          title="Retry PMDC verification"
+                          onClick={() => retryPmdcVerification(row)}
+                          disabled={actionBusyId === String(row?._id)}
+                          style={{ minWidth: 54 }}
+                        >
+                          ↻
                         </button>
                       </div>
                       {row?.rejection_reason ? (
@@ -798,7 +1038,8 @@ const TrainingEventRegistrations = () => {
 
             <div className="d-flex justify-content-between align-items-center mt-3">
               <span className="muted">
-                Active filters will be included: status, event, event city, date range, and search.
+                Active filters will be included: status, PMDC status, event, event city, date
+                range, and search.
               </span>
               <button className="btn" type="button" onClick={executeExport} disabled={exportLoading}>
                 {exportLoading ? "Processing..." : "Download Export"}
