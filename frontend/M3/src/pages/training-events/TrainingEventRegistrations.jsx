@@ -12,7 +12,22 @@ const pickArray = (payload) => {
   return [];
 };
 
-const statusOptions = ["pending", "approved", "rejected", "attended"];
+const statusOptions = ["under_review", "approved", "rejected", "attended"];
+
+const normalizeStatusValue = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "pending") return "under_review";
+  return normalized || "under_review";
+};
+
+const statusLabel = (value) => {
+  const normalized = normalizeStatusValue(value);
+  if (normalized === "under_review") return "Under Review";
+  if (normalized === "approved") return "Approved";
+  if (normalized === "rejected") return "Rejected";
+  if (normalized === "attended") return "Attended";
+  return "Under Review";
+};
 
 const toDateLabel = (value) => {
   if (!value) return "-";
@@ -37,6 +52,7 @@ const TrainingEventRegistrations = () => {
   const [eventFilter, setEventFilter] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [actionBusyId, setActionBusyId] = useState("");
 
   const getAuthHeaders = () => {
     try {
@@ -132,7 +148,7 @@ const TrainingEventRegistrations = () => {
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return rows.filter((entry) => {
-      const status = String(entry?.status || "pending").toLowerCase();
+      const status = normalizeStatusValue(entry?.status || entry?.registration_status);
       if (statusFilter !== "all" && status !== statusFilter) return false;
       if (eventFilter && String(entry?.event?._id || entry?.event || "") !== String(eventFilter)) {
         return false;
@@ -167,7 +183,7 @@ const TrainingEventRegistrations = () => {
         .toLowerCase();
       return hay.includes(needle);
     });
-  }, [rows, search, statusFilter]);
+  }, [rows, search, statusFilter, eventFilter, fromDate, toDate]);
 
   const updateRow = (idValue, patch) => {
     setRows((prev) =>
@@ -177,8 +193,9 @@ const TrainingEventRegistrations = () => {
 
   const updateStatus = async (row, status) => {
     if (!row?._id) return;
-    const previous = row.status;
-    updateRow(row._id, { status });
+    const normalizedStatus = normalizeStatusValue(status);
+    const previous = normalizeStatusValue(row.status);
+    updateRow(row._id, { status: normalizedStatus, registration_status: normalizedStatus });
     try {
       const resp = await fetch(
         `${API_BASE_URL}/training-events/admin/registrations/${row._id}/status`,
@@ -189,7 +206,7 @@ const TrainingEventRegistrations = () => {
             ...getAuthHeaders(),
           },
           body: JSON.stringify({
-            status,
+            status: normalizedStatus,
             internalNotes: row.internalNotes || "",
           }),
         }
@@ -199,8 +216,9 @@ const TrainingEventRegistrations = () => {
         const parsed = parseApiError(data, "Failed to update registration status");
         throw new Error(parsed.issues.join(" ") || parsed.summary);
       }
+      updateRow(row._id, data?.data || {});
     } catch (err) {
-      updateRow(row._id, { status: previous });
+      updateRow(row._id, { status: previous, registration_status: previous });
       alert(err?.message || "Failed to update status");
     }
   };
@@ -217,7 +235,7 @@ const TrainingEventRegistrations = () => {
             ...getAuthHeaders(),
           },
           body: JSON.stringify({
-            status: row.status || "pending",
+            status: normalizeStatusValue(row.status),
             internalNotes: row.internalNotes || "",
           }),
         }
@@ -230,6 +248,65 @@ const TrainingEventRegistrations = () => {
       alert("Notes updated");
     } catch (err) {
       alert(err?.message || "Failed to save notes");
+    }
+  };
+
+  const approveRegistration = async (row) => {
+    if (!row?._id || actionBusyId) return;
+    setActionBusyId(String(row._id));
+    try {
+      const resp = await fetch(
+        `${API_BASE_URL}/training-events/admin/registrations/${row._id}/approve`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const parsed = parseApiError(data, "Failed to approve registration");
+        throw new Error(parsed.issues.join(" ") || parsed.summary);
+      }
+      updateRow(row._id, data?.data || {});
+      alert("Registration approved and confirmation email processed.");
+    } catch (err) {
+      alert(err?.message || "Failed to approve registration");
+    } finally {
+      setActionBusyId("");
+    }
+  };
+
+  const rejectRegistration = async (row) => {
+    if (!row?._id || actionBusyId) return;
+    const rejectionReason = window.prompt("Optional rejection reason", row?.rejection_reason || "");
+    if (rejectionReason === null) return;
+    setActionBusyId(String(row._id));
+    try {
+      const resp = await fetch(
+        `${API_BASE_URL}/training-events/admin/registrations/${row._id}/reject`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({ rejectionReason }),
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const parsed = parseApiError(data, "Failed to reject registration");
+        throw new Error(parsed.issues.join(" ") || parsed.summary);
+      }
+      updateRow(row._id, data?.data || {});
+      alert("Registration rejected and update email processed.");
+    } catch (err) {
+      alert(err?.message || "Failed to reject registration");
+    } finally {
+      setActionBusyId("");
     }
   };
 
@@ -390,11 +467,13 @@ const TrainingEventRegistrations = () => {
                 <tr>
                   <th>Event</th>
                   <th>Doctor</th>
+                  <th>Reg No.</th>
                   <th>PMDC</th>
                   <th>Phone / Email</th>
                   <th>Clinic</th>
                   <th>Registered At</th>
                   <th>Status</th>
+                  <th>Actions</th>
                   <th>Internal Notes</th>
                 </tr>
               </thead>
@@ -406,6 +485,9 @@ const TrainingEventRegistrations = () => {
                       <strong>{row?.doctorName || "-"}</strong>
                       <br />
                       <small className="muted">{row?.registrationId || "-"}</small>
+                    </td>
+                    <td>
+                      <strong>{row?.registration_number || row?.registrationNumber || "-"}</strong>
                     </td>
                     <td>{row?.pmdcNumber || "-"}</td>
                     <td>
@@ -419,15 +501,44 @@ const TrainingEventRegistrations = () => {
                     <td>{toDateLabel(row?.createdAt)}</td>
                     <td>
                       <select
-                        value={row?.status || "pending"}
+                        value={normalizeStatusValue(row?.status || row?.registration_status)}
                         onChange={(event) => updateStatus(row, event.target.value)}
                       >
                         {statusOptions.map((status) => (
                           <option key={status} value={status}>
-                            {status}
+                            {statusLabel(status)}
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td style={{ minWidth: 150 }}>
+                      <div className="actions" style={{ gap: 8 }}>
+                        <button
+                          className="btn"
+                          type="button"
+                          title="Approve registration"
+                          onClick={() => approveRegistration(row)}
+                          disabled={actionBusyId === String(row?._id)}
+                          style={{ minWidth: 54, background: "#16a34a", borderColor: "#16a34a" }}
+                        >
+                          ✅
+                        </button>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          title="Reject registration"
+                          onClick={() => rejectRegistration(row)}
+                          disabled={actionBusyId === String(row?._id)}
+                          style={{ minWidth: 54, color: "#b91c1c", borderColor: "#fecaca" }}
+                        >
+                          ❌
+                        </button>
+                      </div>
+                      {row?.rejection_reason ? (
+                        <small className="muted" style={{ display: "block", marginTop: 6 }}>
+                          Reason: {row.rejection_reason}
+                        </small>
+                      ) : null}
                     </td>
                     <td style={{ minWidth: 240 }}>
                       <textarea
