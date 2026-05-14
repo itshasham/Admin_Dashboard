@@ -128,6 +128,14 @@ const toSlug = (value = "") =>
 
 const cleanString = (value) => String(value || "").trim();
 
+const parsePositiveLength = (raw) => {
+  if (raw === null || raw === undefined) return "";
+  if (typeof raw === "string" && raw.trim() === "") return "";
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return "";
+  return parsed > 0 ? parsed : "";
+};
+
 const normalizeFields = (fields = []) => {
   const list = Array.isArray(fields) ? fields : [];
   if (!list.length) return defaultFields;
@@ -140,14 +148,8 @@ const normalizeFields = (fields = []) => {
     visible: field?.visible !== false,
     validation: {
       pattern: cleanString(field?.validation?.pattern || ""),
-      minLength:
-        Number.isFinite(Number(field?.validation?.minLength)) && Number(field.validation.minLength) >= 0
-          ? Number(field.validation.minLength)
-          : "",
-      maxLength:
-        Number.isFinite(Number(field?.validation?.maxLength)) && Number(field.validation.maxLength) >= 0
-          ? Number(field.validation.maxLength)
-          : "",
+      minLength: parsePositiveLength(field?.validation?.minLength),
+      maxLength: parsePositiveLength(field?.validation?.maxLength),
     },
   }));
 };
