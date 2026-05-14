@@ -531,6 +531,41 @@ const TrainingEventRegistrations = () => {
     }
   };
 
+  const deleteRegistration = async (row) => {
+    if (!row?._id || actionBusyId) return;
+    const regRef = row?.registration_number || row?.registrationNumber || row?.registrationId || row?._id;
+    const confirmed = window.confirm(
+      `Delete this registration (${regRef})?\n\nThis is permanent and should only be used for testing entries.`
+    );
+    if (!confirmed) return;
+
+    setActionBusyId(String(row._id));
+    try {
+      const resp = await fetch(
+        `${API_BASE_URL}/training-events/admin/registrations/${row._id}`,
+        {
+          method: "DELETE",
+          headers: {
+            ...getAuthHeaders(),
+          },
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const parsed = parseApiError(data, "Failed to delete registration");
+        throw new Error(parsed.issues.join(" ") || parsed.summary);
+      }
+      setRows((prev) => prev.filter((entry) => String(entry?._id) !== String(row._id)));
+      setSelectedIds((prev) => prev.filter((entry) => String(entry) !== String(row._id)));
+      await fetchPmdcStats();
+      alert("Registration deleted successfully.");
+    } catch (err) {
+      alert(err?.message || "Failed to delete registration");
+    } finally {
+      setActionBusyId("");
+    }
+  };
+
   const toggleExportColumn = (key) => {
     setExportColumns((prev) => {
       if (prev.includes(key)) {
@@ -882,7 +917,7 @@ const TrainingEventRegistrations = () => {
                         ))}
                       </select>
                     </td>
-                    <td style={{ minWidth: 150 }}>
+                    <td style={{ minWidth: 230 }}>
                       <div className="actions" style={{ gap: 8 }}>
                         <button
                           className="btn"
@@ -913,6 +948,16 @@ const TrainingEventRegistrations = () => {
                           style={{ minWidth: 54 }}
                         >
                           ↻
+                        </button>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          title="Delete registration (test cleanup)"
+                          onClick={() => deleteRegistration(row)}
+                          disabled={actionBusyId === String(row?._id)}
+                          style={{ minWidth: 54, color: "#b91c1c", borderColor: "#fecaca" }}
+                        >
+                          🗑
                         </button>
                       </div>
                       {row?.rejection_reason ? (
