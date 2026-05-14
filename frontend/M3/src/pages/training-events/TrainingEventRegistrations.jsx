@@ -13,6 +13,27 @@ const pickArray = (payload) => {
 };
 
 const statusOptions = ["under_review", "approved", "rejected", "attended"];
+const exportFormats = [
+  { value: "xlsx", label: "Excel (.xlsx)" },
+  { value: "csv", label: "CSV (.csv)" },
+  { value: "pdf", label: "PDF (.pdf)" },
+];
+const exportColumnOptions = [
+  { key: "registration_number", label: "Registration Number" },
+  { key: "doctor_name", label: "Doctor Name" },
+  { key: "pmdc_number", label: "PMDC Number" },
+  { key: "phone_number", label: "Phone Number" },
+  { key: "email_address", label: "Email Address" },
+  { key: "clinic_name", label: "Clinic/Hospital Name" },
+  { key: "specialization", label: "Specialization" },
+  { key: "city", label: "City" },
+  { key: "event_name", label: "Event Name" },
+  { key: "registration_status", label: "Registration Status" },
+  { key: "registration_date", label: "Registration Date" },
+  { key: "approved_date", label: "Approved Date" },
+  { key: "approved_by", label: "Approved By" },
+  { key: "notes_comments", label: "Notes/Comments" },
+];
 
 const normalizeStatusValue = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
@@ -53,6 +74,14 @@ const TrainingEventRegistrations = () => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [actionBusyId, setActionBusyId] = useState("");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState("xlsx");
+  const [exportScope, setExportScope] = useState("filtered");
+  const [exportColumns, setExportColumns] = useState(
+    exportColumnOptions.map((entry) => entry.key)
+  );
+  const [exportLoading, setExportLoading] = useState(false);
 
   const getAuthHeaders = () => {
     try {
@@ -127,7 +156,10 @@ const TrainingEventRegistrations = () => {
         const parsed = parseApiError(data, "Failed to load registrations");
         throw new Error(parsed.issues.join(" ") || parsed.summary);
       }
-      setRows(pickArray(data));
+      const nextRows = pickArray(data);
+      setRows(nextRows);
+      const nextRowIds = new Set(nextRows.map((entry) => String(entry?._id || "")));
+      setSelectedIds((prev) => prev.filter((entry) => nextRowIds.has(String(entry))));
     } catch (err) {
       setRows([]);
       setError(err?.message || "Failed to load registrations");
@@ -184,6 +216,33 @@ const TrainingEventRegistrations = () => {
       return hay.includes(needle);
     });
   }, [rows, search, statusFilter, eventFilter, fromDate, toDate]);
+
+  const filteredIds = useMemo(
+    () => filteredRows.map((entry) => String(entry?._id || "")).filter(Boolean),
+    [filteredRows]
+  );
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((entry) => selectedIds.includes(entry));
+
+  const toggleSelectAllFiltered = () => {
+    setSelectedIds((prev) => {
+      const prevSet = new Set(prev);
+      if (allFilteredSelected) {
+        filteredIds.forEach((entry) => prevSet.delete(entry));
+      } else {
+        filteredIds.forEach((entry) => prevSet.add(entry));
+      }
+      return Array.from(prevSet);
+    });
+  };
+
+  const toggleSelectedRow = (idValue) => {
+    const target = String(idValue || "");
+    if (!target) return;
+    setSelectedIds((prev) =>
+      prev.includes(target) ? prev.filter((entry) => entry !== target) : [...prev, target]
+    );
+  };
 
   const updateRow = (idValue, patch) => {
     setRows((prev) =>
@@ -310,47 +369,80 @@ const TrainingEventRegistrations = () => {
     }
   };
 
-  const exportCsv = async () => {
+  const toggleExportColumn = (key) => {
+    setExportColumns((prev) => {
+      if (prev.includes(key)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((entry) => entry !== key);
+      }
+      return [...prev, key];
+    });
+  };
+
+  const executeExport = async () => {
+    if (!exportColumns.length) {
+      alert("Select at least one column for export.");
+      return;
+    }
+    if (exportScope === "selected" && selectedIds.length === 0) {
+      alert("Select at least one registration row first.");
+      return;
+    }
+    setExportLoading(true);
     try {
-      const url = new URL(`${API_BASE_URL}/training-events/admin/registrations/export`);
-      if (isEventScoped && id) {
-        url.searchParams.set("eventId", id);
-      } else if (eventFilter) {
-        url.searchParams.set("eventId", eventFilter);
+      const url = new URL(
+        `${API_BASE_URL}/training-events/admin/registrations/export/${exportFormat}`
+      );
+      if (exportScope !== "selected") {
+        if (isEventScoped && id) {
+          url.searchParams.set("eventId", id);
+        }
+        if (exportScope === "filtered") {
+          if (!isEventScoped && eventFilter) {
+            url.searchParams.set("eventId", eventFilter);
+          }
+          if (statusFilter !== "all") {
+            url.searchParams.set("status", statusFilter);
+          }
+          if (search.trim()) {
+            url.searchParams.set("q", search.trim());
+          }
+          if (fromDate) {
+            url.searchParams.set("from", fromDate);
+          }
+          if (toDate) {
+            url.searchParams.set("to", toDate);
+          }
+        }
       }
-      if (statusFilter !== "all") {
-        url.searchParams.set("status", statusFilter);
+      if (exportScope === "selected") {
+        url.searchParams.set("ids", selectedIds.join(","));
       }
-      if (search.trim()) {
-        url.searchParams.set("q", search.trim());
-      }
-      if (fromDate) {
-        url.searchParams.set("from", fromDate);
-      }
-      if (toDate) {
-        url.searchParams.set("to", toDate);
-      }
+      url.searchParams.set("columns", exportColumns.join(","));
+
       const resp = await fetch(url.toString(), {
         headers: { ...getAuthHeaders() },
       });
       if (!resp.ok) {
         const payload = await resp.json().catch(() => ({}));
-        const parsed = parseApiError(payload, "Failed to export CSV");
+        const parsed = parseApiError(payload, "Failed to export registrations");
         throw new Error(parsed.issues.join(" ") || parsed.summary);
       }
       const blob = await resp.blob();
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
-      link.download = isEventScoped
-        ? `training-event-registrations-${id}.csv`
-        : "training-event-registrations.csv";
+      link.download = `training-event-registrations.${exportFormat}`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(objectUrl);
+      setShowExportModal(false);
+      alert("Export completed successfully.");
     } catch (err) {
-      alert(err?.message || "Failed to export CSV");
+      alert(err?.message || "Failed to export registrations");
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -371,8 +463,8 @@ const TrainingEventRegistrations = () => {
           <button className="btn secondary" type="button" onClick={() => navigate("/admin/training-events")}>
             ← Back
           </button>
-          <button className="btn" type="button" onClick={exportCsv}>
-            Export CSV
+          <button className="btn" type="button" onClick={() => setShowExportModal(true)}>
+            Export Registrations
           </button>
         </div>
       </div>
@@ -418,7 +510,7 @@ const TrainingEventRegistrations = () => {
             <option value="all">All</option>
             {statusOptions.map((status) => (
               <option key={status} value={status}>
-                {status}
+                {statusLabel(status)}
               </option>
             ))}
           </select>
@@ -451,6 +543,10 @@ const TrainingEventRegistrations = () => {
           >
             Reset Filters
           </button>
+          <button className="btn secondary" type="button" onClick={() => setShowExportModal(true)}>
+            Export
+          </button>
+          <span className="muted">Selected: {selectedIds.length}</span>
           <span className="muted">Showing {filteredRows.length} of {rows.length} registrations</span>
         </div>
       </section>
@@ -465,6 +561,14 @@ const TrainingEventRegistrations = () => {
             <table className="table products-table">
               <thead>
                 <tr>
+                  <th style={{ width: 44 }}>
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={toggleSelectAllFiltered}
+                      title="Select all filtered"
+                    />
+                  </th>
                   <th>Event</th>
                   <th>Doctor</th>
                   <th>Reg No.</th>
@@ -480,6 +584,14 @@ const TrainingEventRegistrations = () => {
               <tbody>
                 {filteredRows.map((row) => (
                   <tr key={row?._id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(String(row?._id || ""))}
+                        onChange={() => toggleSelectedRow(row?._id)}
+                        title="Select registration"
+                      />
+                    </td>
                     <td>{row?.event?.title || eventInfo?.title || "-"}</td>
                     <td>
                       <strong>{row?.doctorName || "-"}</strong>
@@ -562,6 +674,110 @@ const TrainingEventRegistrations = () => {
           </div>
         )}
       </section>
+
+      {showExportModal ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.45)",
+            zIndex: 1000,
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+          }}
+          onClick={() => !exportLoading && setShowExportModal(false)}
+        >
+          <div
+            className="card"
+            style={{ width: "min(760px, 100%)", maxHeight: "90vh", overflow: "auto", padding: 18 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <h3 style={{ marginBottom: 0 }}>Export Registrations</h3>
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={() => setShowExportModal(false)}
+                disabled={exportLoading}
+              >
+                Close
+              </button>
+            </div>
+            <p className="muted">
+              Choose format, export scope, and columns for enterprise-ready reports.
+            </p>
+
+            <div className="row g-3">
+              <div className="col-md-4">
+                <label htmlFor="registration-export-format">Export Format</label>
+                <select
+                  id="registration-export-format"
+                  value={exportFormat}
+                  onChange={(event) => setExportFormat(event.target.value)}
+                >
+                  {exportFormats.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-8">
+                <label htmlFor="registration-export-scope">Export Scope</label>
+                <select
+                  id="registration-export-scope"
+                  value={exportScope}
+                  onChange={(event) => setExportScope(event.target.value)}
+                >
+                  <option value="filtered">Current filtered registrations</option>
+                  <option value="all">All registrations (ignores selected rows)</option>
+                  <option value="selected">
+                    Selected registrations only ({selectedIds.length} selected)
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <label style={{ marginBottom: 8, display: "block" }}>Columns</label>
+              <div className="row g-2">
+                {exportColumnOptions.map((column) => (
+                  <div className="col-md-6" key={column.key}>
+                    <label
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 10,
+                        padding: "8px 10px",
+                        marginBottom: 0,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={exportColumns.includes(column.key)}
+                        onChange={() => toggleExportColumn(column.key)}
+                      />
+                      <span>{column.label}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="d-flex justify-content-between align-items-center mt-3">
+              <span className="muted">
+                Active filters will be included: status, event, date range, and search.
+              </span>
+              <button className="btn" type="button" onClick={executeExport} disabled={exportLoading}>
+                {exportLoading ? "Processing..." : "Download Export"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
