@@ -99,6 +99,9 @@ const emptyEvent = {
   endTime: "",
   venue: "",
   location: "",
+  eventCity: "Lahore",
+  venueAddress: "",
+  mapLocation: "",
   onlineMeetingLink: "",
   organizerName: "NEES Medical Inc.",
   contactInfo: {
@@ -164,6 +167,17 @@ const toDateInput = (value) => {
 const MAX_IMAGES = 5;
 const MAX_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
+const eventCityOptions = [
+  "Lahore",
+  "Islamabad",
+  "Karachi",
+  "Faisalabad",
+  "Multan",
+  "Peshawar",
+  "Quetta",
+  "Hyderabad",
+  "Rawalpindi",
+];
 
 const TrainingEventForm = () => {
   const navigate = useNavigate();
@@ -188,6 +202,11 @@ const TrainingEventForm = () => {
   };
 
   const getSafeEventId = useMemo(() => eventData?._id || id || "", [eventData?._id, id]);
+  const eventCityMode = useMemo(() => {
+    const city = cleanString(eventData.eventCity);
+    if (!city) return "preset";
+    return eventCityOptions.includes(city) ? "preset" : "custom";
+  }, [eventData.eventCity]);
 
   const loadEvent = async () => {
     if (!isEdit) return;
@@ -206,6 +225,9 @@ const TrainingEventForm = () => {
         ...item,
         eventDate: toDateInput(item?.eventDate),
         registrationDeadline: toDateInput(item?.registrationDeadline),
+        eventCity: cleanString(item?.eventCity || item?.location || ""),
+        venueAddress: cleanString(item?.venueAddress || item?.location || ""),
+        mapLocation: cleanString(item?.mapLocation || ""),
         images: Array.isArray(item?.images) ? item.images.slice(0, MAX_IMAGES) : [],
         registrationFields: normalizeFields(item?.registrationFields),
         contactInfo: {
@@ -254,6 +276,17 @@ const TrainingEventForm = () => {
         ...prev.contactInfo,
         [name]: value,
       },
+    }));
+  };
+
+  const handleEventCityModeChange = (mode) => {
+    if (mode === "custom") {
+      setEventData((prev) => ({ ...prev, eventCity: "" }));
+      return;
+    }
+    setEventData((prev) => ({
+      ...prev,
+      eventCity: eventCityOptions.includes(prev.eventCity) ? prev.eventCity : eventCityOptions[0],
     }));
   };
 
@@ -407,6 +440,8 @@ const TrainingEventForm = () => {
     if (!cleanString(eventData.fullDescription)) issues.push("Full description is required");
     if (!cleanString(eventData.eventDate)) issues.push("Event date is required");
     if (!cleanString(eventData.startTime)) issues.push("Event start time is required");
+    if (!cleanString(eventData.eventCity)) issues.push("Event city is required");
+    if (!cleanString(eventData.venueAddress)) issues.push("Full venue address is required");
     if (!cleanString(eventData.venue) && !cleanString(eventData.location)) {
       issues.push("Venue or location is required");
     }
@@ -433,6 +468,9 @@ const TrainingEventForm = () => {
     startTime: cleanString(eventData.startTime),
     endTime: cleanString(eventData.endTime),
     venue: cleanString(eventData.venue),
+    eventCity: cleanString(eventData.eventCity),
+    venueAddress: cleanString(eventData.venueAddress),
+    mapLocation: cleanString(eventData.mapLocation),
     location: cleanString(eventData.location),
     onlineMeetingLink: cleanString(eventData.onlineMeetingLink),
     organizerName: cleanString(eventData.organizerName),
@@ -573,6 +611,10 @@ const TrainingEventForm = () => {
               <div className="product-preview-row">
                 <span>Registration</span>
                 <strong>{eventData.registrationEnabled ? "Open" : "Closed"}</strong>
+              </div>
+              <div className="product-preview-row">
+                <span>Event City</span>
+                <strong>{eventData.eventCity || "--"}</strong>
               </div>
               <div className="product-preview-row">
                 <span>Featured</span>
@@ -719,8 +761,67 @@ const TrainingEventForm = () => {
               <input name="venue" value={eventData.venue} onChange={handleRootChange} />
             </label>
             <label className="field">
+              Event City Mode
+              <select
+                value={eventCityMode}
+                onChange={(event) => handleEventCityModeChange(event.target.value)}
+              >
+                <option value="preset">Select from predefined cities</option>
+                <option value="custom">Custom city input</option>
+              </select>
+            </label>
+
+            {eventCityMode === "preset" ? (
+              <label className="field">
+                Event City
+                <select
+                  name="eventCity"
+                  value={eventCityOptions.includes(eventData.eventCity) ? eventData.eventCity : eventCityOptions[0]}
+                  onChange={handleRootChange}
+                >
+                  {eventCityOptions.map((cityName) => (
+                    <option key={cityName} value={cityName}>
+                      {cityName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <label className="field">
+                Event City (Custom)
+                <input
+                  name="eventCity"
+                  value={eventData.eventCity}
+                  onChange={handleRootChange}
+                  placeholder="Enter city name"
+                  required
+                />
+              </label>
+            )}
+
+            <label className="field">
               Location
               <input name="location" value={eventData.location} onChange={handleRootChange} />
+            </label>
+            <label className="field" style={{ gridColumn: "1 / -1" }}>
+              Full Venue Address
+              <input
+                name="venueAddress"
+                value={eventData.venueAddress}
+                onChange={handleRootChange}
+                placeholder="Street, Area, City"
+                required
+              />
+            </label>
+            <label className="field" style={{ gridColumn: "1 / -1" }}>
+              Google Maps Location (optional)
+              <input
+                type="url"
+                name="mapLocation"
+                value={eventData.mapLocation}
+                onChange={handleRootChange}
+                placeholder="https://maps.google.com/..."
+              />
             </label>
 
             <label className="field">

@@ -27,6 +27,8 @@ const exportColumnOptions = [
   { key: "clinic_name", label: "Clinic/Hospital Name" },
   { key: "specialization", label: "Specialization" },
   { key: "city", label: "City" },
+  { key: "event_city", label: "Event City" },
+  { key: "event_location", label: "Event Location" },
   { key: "event_name", label: "Event Name" },
   { key: "registration_status", label: "Registration Status" },
   { key: "registration_date", label: "Registration Date" },
@@ -71,6 +73,7 @@ const TrainingEventRegistrations = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [eventFilter, setEventFilter] = useState("");
+  const [eventCityFilter, setEventCityFilter] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [actionBusyId, setActionBusyId] = useState("");
@@ -141,6 +144,9 @@ const TrainingEventRegistrations = () => {
       if (!isEventScoped && eventFilter) {
         url.searchParams.set("eventId", eventFilter);
       }
+      if (!isEventScoped && eventCityFilter.trim()) {
+        url.searchParams.set("eventCity", eventCityFilter.trim());
+      }
       if (!isEventScoped && fromDate) {
         url.searchParams.set("from", fromDate);
       }
@@ -175,7 +181,7 @@ const TrainingEventRegistrations = () => {
 
   useEffect(() => {
     fetchRows();
-  }, [id, statusFilter, eventFilter, fromDate, toDate]);
+  }, [id, statusFilter, eventFilter, eventCityFilter, fromDate, toDate]);
 
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -184,6 +190,10 @@ const TrainingEventRegistrations = () => {
       if (statusFilter !== "all" && status !== statusFilter) return false;
       if (eventFilter && String(entry?.event?._id || entry?.event || "") !== String(eventFilter)) {
         return false;
+      }
+      if (eventCityFilter.trim()) {
+        const city = String(entry?.event_city || entry?.event?.eventCity || "").toLowerCase();
+        if (!city.includes(eventCityFilter.trim().toLowerCase())) return false;
       }
       if (fromDate || toDate) {
         const created = new Date(entry?.createdAt || 0);
@@ -209,13 +219,15 @@ const TrainingEventRegistrations = () => {
         entry?.emailAddress,
         entry?.clinicName,
         entry?.event?.title,
+        entry?.event_city,
+        entry?.event_location,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return hay.includes(needle);
     });
-  }, [rows, search, statusFilter, eventFilter, fromDate, toDate]);
+  }, [rows, search, statusFilter, eventFilter, eventCityFilter, fromDate, toDate]);
 
   const filteredIds = useMemo(
     () => filteredRows.map((entry) => String(entry?._id || "")).filter(Boolean),
@@ -404,6 +416,9 @@ const TrainingEventRegistrations = () => {
           if (statusFilter !== "all") {
             url.searchParams.set("status", statusFilter);
           }
+          if (eventCityFilter.trim()) {
+            url.searchParams.set("eventCity", eventCityFilter.trim());
+          }
           if (search.trim()) {
             url.searchParams.set("q", search.trim());
           }
@@ -482,7 +497,7 @@ const TrainingEventRegistrations = () => {
             id="event-registration-search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Find by doctor, PMDC, phone, email"
+            placeholder="Find by doctor, PMDC, phone, email, city"
           />
           {!isEventScoped ? (
             <>
@@ -499,6 +514,13 @@ const TrainingEventRegistrations = () => {
                   </option>
                 ))}
               </select>
+              <label htmlFor="event-registration-city">Event City</label>
+              <input
+                id="event-registration-city"
+                value={eventCityFilter}
+                onChange={(event) => setEventCityFilter(event.target.value)}
+                placeholder="Filter by event city"
+              />
             </>
           ) : null}
           <label htmlFor="event-registration-status">Status</label>
@@ -537,6 +559,7 @@ const TrainingEventRegistrations = () => {
               setSearch("");
               setStatusFilter("all");
               setEventFilter("");
+              setEventCityFilter("");
               setFromDate("");
               setToDate("");
             }}
@@ -570,6 +593,7 @@ const TrainingEventRegistrations = () => {
                     />
                   </th>
                   <th>Event</th>
+                  <th>Event City</th>
                   <th>Doctor</th>
                   <th>Reg No.</th>
                   <th>PMDC</th>
@@ -593,6 +617,11 @@ const TrainingEventRegistrations = () => {
                       />
                     </td>
                     <td>{row?.event?.title || eventInfo?.title || "-"}</td>
+                    <td>
+                      <strong>{row?.event_city || row?.event?.eventCity || "-"}</strong>
+                      <br />
+                      <small className="muted">{row?.event_location || row?.event?.venueAddress || "-"}</small>
+                    </td>
                     <td>
                       <strong>{row?.doctorName || "-"}</strong>
                       <br />
@@ -769,7 +798,7 @@ const TrainingEventRegistrations = () => {
 
             <div className="d-flex justify-content-between align-items-center mt-3">
               <span className="muted">
-                Active filters will be included: status, event, date range, and search.
+                Active filters will be included: status, event, event city, date range, and search.
               </span>
               <button className="btn" type="button" onClick={executeExport} disabled={exportLoading}>
                 {exportLoading ? "Processing..." : "Download Export"}
