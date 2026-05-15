@@ -13,7 +13,16 @@ const pickArray = (payload) => {
 };
 
 const statusOptions = ["under_review", "approved", "rejected", "attended"];
-const pmdcStatusOptions = ["all", "pending", "verified", "unverified", "manual_review"];
+const pmdcStatusOptions = [
+  "all",
+  "pending",
+  "processing",
+  "retry_pending",
+  "verified",
+  "unverified",
+  "failed",
+  "manual_review",
+];
 const exportFormats = [
   { value: "xlsx", label: "Excel (.xlsx)" },
   { value: "csv", label: "CSV (.csv)" },
@@ -23,6 +32,8 @@ const exportColumnOptions = [
   { key: "registration_number", label: "Registration Number" },
   { key: "doctor_name", label: "Doctor Name" },
   { key: "pmdc_number", label: "PMDC Number" },
+  { key: "cnic_number", label: "CNIC Number" },
+  { key: "cnic_masked", label: "CNIC Masked" },
   { key: "phone_number", label: "Phone Number" },
   { key: "email_address", label: "Email Address" },
   { key: "clinic_name", label: "Clinic/Hospital Name" },
@@ -41,6 +52,164 @@ const exportColumnOptions = [
   { key: "approved_by", label: "Approved By" },
   { key: "notes_comments", label: "Notes/Comments" },
 ];
+
+const PMDC_SEARCH_ENDPOINT = "https://hospitals-inspections.pmdc.pk/api/DRC/GetData";
+const PMDC_QUALIFICATIONS_ENDPOINT =
+  "https://hospitals-inspections.pmdc.pk/api/DRC/GetQualifications";
+const PMDC_MIN_SIMILARITY = 0.87;
+
+const cleanString = (value) => String(value || "").trim();
+const normalizePmdcNumber = (value) =>
+  cleanString(value)
+    .toUpperCase()
+    .replace(/[‐‑‒–—―]/g, "-")
+    .replace(/\s+/g, "")
+    .replace(/[^A-Z0-9\-\/]/g, "");
+const pmdcComparable = (value) => normalizePmdcNumber(value).replace(/[-/]/g, "");
+const pmdcNumberMatches = (left, right) => {
+  const a = normalizePmdcNumber(left);
+  const b = normalizePmdcNumber(right);
+  return Boolean(a && b && (a === b || pmdcComparable(a) === pmdcComparable(b)));
+};
+const normalizeDoctorName = (value) =>
+  cleanString(value)
+    .toLowerCase()
+    .replace(/\bdr\.?\s*/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+const levenshteinDistance = (left = "", right = "") => {
+  const a = String(left);
+  const b = String(right);
+  const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i += 1) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j += 1) matrix[0][j] = j;
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+    }
+  }
+  return matrix[a.length][b.length];
+};
+const doctorNameSimilarity = (left = "", right = "") => {
+  const a = normalizeDoctorName(left);
+  const b = normalizeDoctorName(right);
+  if (!a || !b) return 0;
+  const direct = Math.max(0, 1 - levenshteinDistance(a, b) / (Math.max(a.length, b.length) || 1));
+  const aTokens = new Set(a.split(" ").filter(Boolean));
+  const bTokens = new Set(b.split(" ").filter(Boolean));
+  let overlap = 0;
+  aTokens.forEach((token) => {
+    if (bTokens.has(token)) overlap += 1;
+  });
+  const tokenScore = Math.max(aTokens.size, bTokens.size)
+    ? overlap / Math.max(aTokens.size, bTokens.size)
+    : 0;
+  return Math.max(direct, tokenScore);
+};
+const parsePmdcCandidates = (payload) => {
+  const data = Array.isArray(payload?.data) ? payload.data : payload?.data ? [payload.data] : [];
+  return data
+    .map((entry) => ({
+      registrationNo: cleanString(entry?.RegistrationNo || entry?.registrationNo),
+      name: cleanString(entry?.Name || entry?.name),
+      fatherName: cleanString(entry?.FatherName || entry?.fatherName),
+      status: cleanString(entry?.Status || entry?.status),
+    }))
+    .filter((entry) => entry.registrationNo || entry.name);
+};
+const fetchPmdcFromBrowser = async (endpoint, pmdcNumber) => {
+  const body = new URLSearchParams();
+  body.set("RegistrationNo", cleanString(pmdcNumber));
+  body.set("Name", "");
+  body.set("FatherName", "");
+  const resp = await fetch(endpoint, {
+    method: "POST",
+    mode: "cors",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      Accept: "application/json, text/javascript, */*; q=0.01",
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    body: body.toString(),
+  });
+  const payload = await resp.json().catch(() => ({}));
+  return { ok: resp.ok, status: resp.status, payload };
+};
+const verifyPmdcInBrowser = async ({ pmdcNumber, doctorName }) => {
+  const search = await fetchPmdcFromBrowser(PMDC_SEARCH_ENDPOINT, pmdcNumber);
+  let candidates = search.ok ? parsePmdcCandidates(search.payload) : [];
+  let endpointUsed = PMDC_SEARCH_ENDPOINT;
+  let httpStatus = search.status;
+
+  if (!candidates.length) {
+    const fallback = await fetchPmdcFromBrowser(PMDC_QUALIFICATIONS_ENDPOINT, pmdcNumber);
+    const fallbackCandidates = fallback.ok ? parsePmdcCandidates(fallback.payload) : [];
+    candidates = fallbackCandidates;
+    endpointUsed = PMDC_QUALIFICATIONS_ENDPOINT;
+    httpStatus = fallback.status;
+  }
+
+  if (!candidates.length) {
+    return {
+      outcome: "failed",
+      reason: `PMDC returned no browser-verifiable data (${httpStatus || "no response"})`,
+      similarity: 0,
+      verifiedName: "",
+      httpStatus,
+      endpointUsed,
+    };
+  }
+
+  const exact = candidates.filter((entry) => pmdcNumberMatches(entry.registrationNo, pmdcNumber));
+  const pool = exact.length ? exact : candidates;
+  const best = pool
+    .map((entry) => ({ ...entry, similarity: doctorNameSimilarity(doctorName, entry.name) }))
+    .sort((a, b) => b.similarity - a.similarity)[0];
+
+  if (!best) {
+    return {
+      outcome: "manual_review",
+      reason: "PMDC browser response could not be parsed confidently",
+      similarity: 0,
+      verifiedName: "",
+      httpStatus,
+      endpointUsed,
+    };
+  }
+
+  if (/(expired|in[\s-]*active|cancel|suspend|revok)/i.test(best.status || "")) {
+    return {
+      outcome: "unverified",
+      reason: "PMDC record is not active",
+      similarity: best.similarity,
+      verifiedName: best.name,
+      httpStatus,
+      endpointUsed,
+    };
+  }
+
+  if (best.similarity >= PMDC_MIN_SIMILARITY) {
+    return {
+      outcome: "verified",
+      reason: "Name matched successfully from PMDC browser lookup",
+      similarity: best.similarity,
+      verifiedName: best.name,
+      httpStatus,
+      endpointUsed,
+    };
+  }
+
+  return {
+    outcome: "manual_review",
+    reason: "Name mismatch with PMDC record. Manual review required",
+    similarity: best.similarity,
+    verifiedName: best.name,
+    httpStatus,
+    endpointUsed,
+  };
+};
 
 const normalizeStatusValue = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
@@ -69,7 +238,17 @@ const toDateLabel = (value) => {
 const normalizePmdcStatusValue = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
   if (!normalized) return "pending";
-  if (["verified", "unverified", "manual_review", "pending"].includes(normalized)) {
+  if (
+    [
+      "verified",
+      "unverified",
+      "manual_review",
+      "pending",
+      "processing",
+      "retry_pending",
+      "failed",
+    ].includes(normalized)
+  ) {
     return normalized;
   }
   return "pending";
@@ -77,14 +256,31 @@ const normalizePmdcStatusValue = (value) => {
 
 const pmdcStatusLabel = (value) => {
   const normalized = normalizePmdcStatusValue(value);
+  if (normalized === "processing") return "Verification In Progress";
+  if (normalized === "retry_pending") return "Retry Scheduled";
   if (normalized === "verified") return "PMDC Verified";
   if (normalized === "unverified") return "PMDC Unverified";
+  if (normalized === "failed") return "Verification Failed";
   if (normalized === "manual_review") return "Manual Review";
   return "Verification Pending";
 };
 
 const pmdcBadgeStyle = (value) => {
   const normalized = normalizePmdcStatusValue(value);
+  if (normalized === "processing") {
+    return {
+      background: "#dbeafe",
+      color: "#1d4ed8",
+      border: "1px solid #93c5fd",
+    };
+  }
+  if (normalized === "retry_pending") {
+    return {
+      background: "#ffedd5",
+      color: "#9a3412",
+      border: "1px solid #fdba74",
+    };
+  }
   if (normalized === "verified") {
     return {
       background: "#dcfce7",
@@ -97,6 +293,13 @@ const pmdcBadgeStyle = (value) => {
       background: "#fee2e2",
       color: "#991b1b",
       border: "1px solid #fecaca",
+    };
+  }
+  if (normalized === "failed") {
+    return {
+      background: "#ffe4e6",
+      color: "#9f1239",
+      border: "1px solid #fda4af",
     };
   }
   if (normalized === "manual_review") {
@@ -228,6 +431,35 @@ const TrainingEventRegistrations = () => {
     }
   };
 
+  const forceResetPmdcLocks = async () => {
+    const confirmed = window.confirm(
+      "Force reset stale PMDC processing locks?\n\nUse this when rows are stuck in 'Verification In Progress'."
+    );
+    if (!confirmed) return;
+    try {
+      const resp = await fetch(
+        `${API_BASE_URL}/training-events/admin/registrations/reset-locks`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const parsed = parseApiError(data, "Failed to reset PMDC locks");
+        throw new Error(parsed.issues.join(" ") || parsed.summary);
+      }
+      await fetchRows();
+      await fetchPmdcStats();
+      alert(`PMDC lock reset done. Updated rows: ${Number(data?.data?.updated || 0)}`);
+    } catch (err) {
+      alert(err?.message || "Failed to reset PMDC locks");
+    }
+  };
+
   const fetchRows = async () => {
     setLoading(true);
     setError("");
@@ -288,6 +520,14 @@ const TrainingEventRegistrations = () => {
   }, [id, statusFilter, pmdcStatusFilter, eventFilter, eventCityFilter, fromDate, toDate]);
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      fetchRows();
+      fetchPmdcStats();
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [id, statusFilter, pmdcStatusFilter, eventFilter, eventCityFilter, fromDate, toDate]);
+
+  useEffect(() => {
     fetchPmdcStats();
   }, [id, eventFilter]);
 
@@ -297,7 +537,13 @@ const TrainingEventRegistrations = () => {
       const status = normalizeStatusValue(entry?.status || entry?.registration_status);
       if (statusFilter !== "all" && status !== statusFilter) return false;
       const pmdcStatus = normalizePmdcStatusValue(entry?.pmdc_verification_status);
-      if (pmdcStatusFilter !== "all" && pmdcStatus !== pmdcStatusFilter) return false;
+      if (pmdcStatusFilter !== "all") {
+        if (pmdcStatusFilter === "pending") {
+          if (!["pending", "processing", "retry_pending"].includes(pmdcStatus)) return false;
+        } else if (pmdcStatus !== pmdcStatusFilter) {
+          return false;
+        }
+      }
       if (eventFilter && String(entry?.event?._id || entry?.event || "") !== String(eventFilter)) {
         return false;
       }
@@ -324,6 +570,8 @@ const TrainingEventRegistrations = () => {
       const hay = [
         entry?.registrationId,
         entry?.doctorName,
+        entry?.cnicNumber,
+        entry?.cnic_masked,
         entry?.pmdcNumber,
         entry?.phoneNumber,
         entry?.emailAddress,
@@ -506,6 +754,50 @@ const TrainingEventRegistrations = () => {
     if (!row?._id || actionBusyId) return;
     setActionBusyId(String(row._id));
     try {
+      let browserVerification = null;
+      try {
+        browserVerification = await verifyPmdcInBrowser({
+          pmdcNumber: row?.pmdcNumber,
+          doctorName: row?.doctorName,
+        });
+      } catch (browserError) {
+        browserVerification = {
+          outcome: "failed",
+          reason: `Browser PMDC lookup failed: ${browserError?.message || "request failed"}`,
+          similarity: 0,
+          verifiedName: "",
+          httpStatus: 0,
+          endpointUsed: "browser_pmdc_direct",
+        };
+      }
+
+      if (browserVerification?.outcome && browserVerification.outcome !== "failed") {
+        const saveResp = await fetch(
+          `${API_BASE_URL}/training-events/admin/registrations/${row._id}/browser-pmdc-verification`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...getAuthHeaders(),
+            },
+            body: JSON.stringify(browserVerification),
+          }
+        );
+        const saveData = await saveResp.json().catch(() => ({}));
+        if (!saveResp.ok) {
+          const parsed = parseApiError(saveData, "Failed to save browser PMDC verification");
+          throw new Error(parsed.issues.join(" ") || parsed.summary);
+        }
+        updateRow(row._id, saveData?.data || {});
+        await fetchPmdcStats();
+        alert(
+          browserVerification.outcome === "verified"
+            ? "PMDC verified directly from browser and registration approved."
+            : "PMDC browser verification saved for review."
+        );
+        return;
+      }
+
       const resp = await fetch(
         `${API_BASE_URL}/training-events/admin/registrations/${row._id}/retry-verification`,
         {
@@ -523,11 +815,59 @@ const TrainingEventRegistrations = () => {
       }
       updateRow(row._id, data?.data || {});
       await fetchPmdcStats();
-      alert("PMDC verification retry queued.");
+      if (data?.data?.retryResult?.processed) {
+        alert(
+          `Server retry processed. Browser lookup did not verify first: ${
+            browserVerification?.reason || "unknown browser result"
+          }`
+        );
+      } else {
+        alert(
+          `Server retry queued. Browser lookup did not verify first: ${
+            browserVerification?.reason || "unknown browser result"
+          }`
+        );
+      }
     } catch (err) {
       alert(err?.message || "Failed to retry verification");
     } finally {
       setActionBusyId("");
+    }
+  };
+
+  const showPmdcDiagnostics = async (row) => {
+    if (!row?._id) return;
+    try {
+      const resp = await fetch(
+        `${API_BASE_URL}/training-events/admin/registrations/${row._id}/pmdc-diagnostics`,
+        {
+          headers: { ...getAuthHeaders() },
+          cache: "no-store",
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const parsed = parseApiError(data, "Failed to load PMDC diagnostics");
+        throw new Error(parsed.issues.join(" ") || parsed.summary);
+      }
+      const diag = data?.data || {};
+      const last = Array.isArray(diag.logs) && diag.logs.length ? diag.logs[0] : null;
+      alert(
+        [
+          `Status: ${diag.status || "-"}`,
+          `Reason: ${diag.reason || "-"}`,
+          `Attempts: ${diag.attempts ?? 0} / Retries: ${diag.retries ?? 0}`,
+          `Next Retry: ${toDateLabel(diag.nextRetryAt)}`,
+          `Last Error: ${diag.lastError || "-"}`,
+          last
+            ? `Last Log: status=${last.status || "-"}, source=${last.sourceStatus || "-"}, code=${
+                last.responseCode ?? "-"
+              }`
+            : "Last Log: none",
+        ].join("\n")
+      );
+    } catch (err) {
+      alert(err?.message || "Failed to load PMDC diagnostics");
     }
   };
 
@@ -669,6 +1009,9 @@ const TrainingEventRegistrations = () => {
           <button className="btn secondary" type="button" onClick={processVerificationQueueNow}>
             Process PMDC Queue
           </button>
+          <button className="btn secondary" type="button" onClick={forceResetPmdcLocks}>
+            Force Reset PMDC Locks
+          </button>
           <button className="btn" type="button" onClick={() => setShowExportModal(true)}>
             Export Registrations
           </button>
@@ -679,12 +1022,19 @@ const TrainingEventRegistrations = () => {
         <section className="card" style={{ marginBottom: 14 }}>
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
             <strong>PMDC Verification Overview</strong>
-            <small className="muted">Auto-check interval: 30s per request</small>
+            <small className="muted">Auto-check runs continuously with retry backoff (5m / 15m / 30m)</small>
           </div>
           <div className="d-flex flex-wrap gap-2" style={{ marginTop: 10 }}>
             <span className="badge bg-light text-dark">Total: {stats.total || 0}</span>
+            <span className="badge bg-light text-dark">Queue Due: {stats.queuePending || 0}</span>
             <span className="badge" style={{ background: "#fef3c7", color: "#92400e" }}>
               Pending: {stats.pending || 0}
+            </span>
+            <span className="badge" style={{ background: "#dbeafe", color: "#1d4ed8" }}>
+              Processing: {stats.processing || 0}
+            </span>
+            <span className="badge" style={{ background: "#ffedd5", color: "#9a3412" }}>
+              Retry: {stats.retry_pending || 0}
             </span>
             <span className="badge" style={{ background: "#dcfce7", color: "#166534" }}>
               Verified: {stats.verified || 0}
@@ -692,10 +1042,26 @@ const TrainingEventRegistrations = () => {
             <span className="badge" style={{ background: "#fee2e2", color: "#991b1b" }}>
               Unverified: {stats.unverified || 0}
             </span>
+            <span className="badge" style={{ background: "#ffe4e6", color: "#9f1239" }}>
+              Failed: {stats.failed || 0}
+            </span>
             <span className="badge" style={{ background: "#ede9fe", color: "#5b21b6" }}>
               Manual Review: {stats.manual_review || 0}
             </span>
           </div>
+          {stats?.queueHealth ? (
+            <div style={{ marginTop: 8 }}>
+              <small className="muted">
+                Worker: {stats.queueHealth.processing ? "Running" : "Idle"}
+                {stats.queueHealth.lastResultStatus
+                  ? ` | Last result: ${stats.queueHealth.lastResultStatus}`
+                  : ""}
+                {stats.queueHealth.lastError
+                  ? ` | Last error: ${stats.queueHealth.lastError}`
+                  : ""}
+              </small>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -712,7 +1078,7 @@ const TrainingEventRegistrations = () => {
             id="event-registration-search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Find by doctor, PMDC, phone, email, city"
+            placeholder="Find by doctor, CNIC, PMDC, phone, email, city"
           />
           {!isEventScoped ? (
             <>
@@ -883,6 +1249,23 @@ const TrainingEventRegistrations = () => {
                           {row?.pmdc_verification_reason || "Verification pending"}
                         </small>
                       </div>
+                      {typeof row?.verification_attempts === "number" ? (
+                        <div>
+                          <small className="muted">
+                            Attempts: {row.verification_attempts}
+                            {typeof row?.retry_attempts === "number"
+                              ? ` / Retries: ${row.retry_attempts}`
+                              : ""}
+                          </small>
+                        </div>
+                      ) : null}
+                      {row?.verification_next_attempt_at || row?.retry_next_at ? (
+                        <div>
+                          <small className="muted">
+                            Next retry: {toDateLabel(row?.retry_next_at || row?.verification_next_attempt_at)}
+                          </small>
+                        </div>
+                      ) : null}
                       {typeof row?.verification_similarity_score === "number" ? (
                         <div>
                           <small className="muted">
@@ -948,6 +1331,16 @@ const TrainingEventRegistrations = () => {
                           style={{ minWidth: 54 }}
                         >
                           ↻
+                        </button>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          title="PMDC diagnostics"
+                          onClick={() => showPmdcDiagnostics(row)}
+                          disabled={actionBusyId === String(row?._id)}
+                          style={{ minWidth: 54 }}
+                        >
+                          ?
                         </button>
                         <button
                           className="btn secondary"
