@@ -71,13 +71,28 @@ const pmdcNumberMatches = (left, right) => {
   const b = normalizePmdcNumber(right);
   return Boolean(a && b && (a === b || pmdcComparable(a) === pmdcComparable(b)));
 };
+const normalizeNameToken = (value) => {
+  const token = cleanString(value).toLowerCase();
+  const variants = {
+    muhammad: "mohammad",
+    muhammed: "mohammad",
+    mohammed: "mohammad",
+    rehman: "rahman",
+    aamna: "amna",
+  };
+  return variants[token] || token;
+};
 const normalizeDoctorName = (value) =>
   cleanString(value)
     .toLowerCase()
-    .replace(/\bdr\.?\s*/g, "")
+    .replace(/\b(dr|prof|mr|mrs|ms|miss)\.?\s+/g, "")
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map(normalizeNameToken)
+    .join(" ");
 const levenshteinDistance = (left = "", right = "") => {
   const a = String(left);
   const b = String(right);
@@ -97,16 +112,27 @@ const doctorNameSimilarity = (left = "", right = "") => {
   const b = normalizeDoctorName(right);
   if (!a || !b) return 0;
   const direct = Math.max(0, 1 - levenshteinDistance(a, b) / (Math.max(a.length, b.length) || 1));
-  const aTokens = new Set(a.split(" ").filter(Boolean));
-  const bTokens = new Set(b.split(" ").filter(Boolean));
-  let overlap = 0;
-  aTokens.forEach((token) => {
-    if (bTokens.has(token)) overlap += 1;
-  });
-  const tokenScore = Math.max(aTokens.size, bTokens.size)
-    ? overlap / Math.max(aTokens.size, bTokens.size)
+  const aTokens = a.split(" ").filter(Boolean);
+  const bTokens = b.split(" ").filter(Boolean);
+  const tokenSimilarity = (token, candidates) =>
+    candidates.reduce((best, candidate) => {
+      const score = Math.max(
+        0,
+        1 - levenshteinDistance(token, candidate) / (Math.max(token.length, candidate.length) || 1)
+      );
+      return Math.max(best, score);
+    }, 0);
+  const firstScore = Math.max(tokenSimilarity(aTokens[0], bTokens), tokenSimilarity(bTokens[0], aTokens));
+  if (firstScore < 0.6) return Math.max(direct * 0.6, firstScore * 0.5);
+  const secondScore =
+    aTokens.length > 1 && bTokens.length > 1
+      ? Math.max(tokenSimilarity(aTokens[1], bTokens), tokenSimilarity(bTokens[1], aTokens))
+      : firstScore;
+  const overlapScore = aTokens.length
+    ? aTokens.reduce((sum, token) => sum + tokenSimilarity(token, bTokens), 0) / aTokens.length
     : 0;
-  return Math.max(direct, tokenScore);
+  const weighted = firstScore * 0.5 + secondScore * 0.3 + overlapScore * 0.2;
+  return Math.min(1, Math.max(direct, weighted));
 };
 const parsePmdcCandidates = (payload) => {
   const data = Array.isArray(payload?.data) ? payload.data : payload?.data ? [payload.data] : [];
@@ -201,9 +227,20 @@ const verifyPmdcInBrowser = async ({ pmdcNumber, doctorName }) => {
     };
   }
 
+  if (best.similarity >= 0.65) {
+    return {
+      outcome: "manual_review",
+      reason: "Name partially matched with PMDC record. Manual review required",
+      similarity: best.similarity,
+      verifiedName: best.name,
+      httpStatus,
+      endpointUsed,
+    };
+  }
+
   return {
-    outcome: "manual_review",
-    reason: "Name mismatch with PMDC record. Manual review required",
+    outcome: "unverified",
+    reason: "Name does not match PMDC record",
     similarity: best.similarity,
     verifiedName: best.name,
     httpStatus,
@@ -792,7 +829,7 @@ const TrainingEventRegistrations = () => {
         await fetchPmdcStats();
         alert(
           browserVerification.outcome === "verified"
-            ? "PMDC verified directly from browser and registration approved."
+            ? "PMDC verified directly from browser. Registration is waiting for admin approval."
             : "PMDC browser verification saved for review."
         );
         return;
