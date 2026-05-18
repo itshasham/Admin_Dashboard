@@ -320,6 +320,16 @@ const pmdcBadgeStyle = (value) => {
   };
 };
 
+const canRetryPmdcVerification = (row) => {
+  const approvalStatus = normalizeStatusValue(row?.status || row?.registration_status);
+  const pmdcStatus = normalizePmdcStatusValue(row?.pmdc_verification_status);
+  if (["approved", "attended", "rejected"].includes(approvalStatus)) return false;
+  if (pmdcStatus === "verified") return false;
+  return ["pending", "processing", "retry_pending", "unverified", "failed", "manual_review"].includes(
+    pmdcStatus
+  );
+};
+
 const TrainingEventRegistrations = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -715,7 +725,6 @@ const TrainingEventRegistrations = () => {
         throw new Error(parsed.issues.join(" ") || parsed.summary);
       }
       updateRow(row._id, data?.data || {});
-      alert("Registration approved and confirmation email processed.");
     } catch (err) {
       alert(err?.message || "Failed to approve registration");
     } finally {
@@ -756,6 +765,7 @@ const TrainingEventRegistrations = () => {
 
   const retryPmdcVerification = async (row) => {
     if (!row?._id || actionBusyId) return;
+    if (!canRetryPmdcVerification(row)) return;
     setActionBusyId(String(row._id));
     try {
       let browserVerification = null;
@@ -1326,16 +1336,18 @@ const TrainingEventRegistrations = () => {
                         >
                           ❌
                         </button>
-                        <button
-                          className="btn secondary"
-                          type="button"
-                          title="Retry PMDC verification"
-                          onClick={() => retryPmdcVerification(row)}
-                          disabled={actionBusyId === String(row?._id)}
-                          style={{ minWidth: 54 }}
-                        >
-                          ↻
-                        </button>
+                        {canRetryPmdcVerification(row) ? (
+                          <button
+                            className="btn secondary"
+                            type="button"
+                            title="Retry PMDC verification"
+                            onClick={() => retryPmdcVerification(row)}
+                            disabled={actionBusyId === String(row?._id)}
+                            style={{ minWidth: 54 }}
+                          >
+                            ↻
+                          </button>
+                        ) : null}
                         <button
                           className="btn secondary"
                           type="button"
