@@ -203,20 +203,11 @@ const verifyPmdcInBrowser = async ({ pmdcNumber, doctorName }) => {
     };
   }
 
-  if (/(expired|in[\s-]*active|cancel|suspend|revok)/i.test(best.status || "")) {
-    return {
-      outcome: "unverified",
-      reason: "PMDC record is not active",
-      similarity: 1,
-      verifiedName: best.name,
-      httpStatus,
-      endpointUsed,
-    };
-  }
-
   return {
     outcome: "verified",
-    reason: "PMDC number found in PMDC portal",
+    reason: best.status
+      ? `PMDC number found in PMDC portal (${best.status})`
+      : "PMDC number found in PMDC portal",
     similarity: 1,
     verifiedName: best.name,
     httpStatus,
