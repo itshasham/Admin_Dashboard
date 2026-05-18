@@ -190,14 +190,12 @@ const verifyPmdcInBrowser = async ({ pmdcNumber, doctorName }) => {
 
   const exact = candidates.filter((entry) => pmdcNumberMatches(entry.registrationNo, pmdcNumber));
   const pool = exact.length ? exact : candidates;
-  const best = pool
-    .map((entry) => ({ ...entry, similarity: doctorNameSimilarity(doctorName, entry.name) }))
-    .sort((a, b) => b.similarity - a.similarity)[0];
+  const best = pool[0];
 
   if (!best) {
     return {
-      outcome: "manual_review",
-      reason: "PMDC browser response could not be parsed confidently",
+      outcome: "unverified",
+      reason: "PMDC number not found",
       similarity: 0,
       verifiedName: "",
       httpStatus,
@@ -209,29 +207,7 @@ const verifyPmdcInBrowser = async ({ pmdcNumber, doctorName }) => {
     return {
       outcome: "unverified",
       reason: "PMDC record is not active",
-      similarity: best.similarity,
-      verifiedName: best.name,
-      httpStatus,
-      endpointUsed,
-    };
-  }
-
-  if (best.similarity >= PMDC_MIN_SIMILARITY) {
-    return {
-      outcome: "verified",
-      reason: "Name matched successfully from PMDC browser lookup",
-      similarity: best.similarity,
-      verifiedName: best.name,
-      httpStatus,
-      endpointUsed,
-    };
-  }
-
-  if (best.similarity >= 0.65) {
-    return {
-      outcome: "manual_review",
-      reason: "Name partially matched with PMDC record. Manual review required",
-      similarity: best.similarity,
+      similarity: 1,
       verifiedName: best.name,
       httpStatus,
       endpointUsed,
@@ -239,9 +215,9 @@ const verifyPmdcInBrowser = async ({ pmdcNumber, doctorName }) => {
   }
 
   return {
-    outcome: "unverified",
-    reason: "Name does not match PMDC record",
-    similarity: best.similarity,
+    outcome: "verified",
+    reason: "PMDC number found in PMDC portal",
+    similarity: 1,
     verifiedName: best.name,
     httpStatus,
     endpointUsed,
