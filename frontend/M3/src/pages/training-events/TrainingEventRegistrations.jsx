@@ -351,6 +351,8 @@ const TrainingEventRegistrations = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFormat, setExportFormat] = useState("xlsx");
   const [exportScope, setExportScope] = useState("filtered");
+  const [bulkVerifyBusy, setBulkVerifyBusy] = useState(false);
+  const [bulkVerifyProgress, setBulkVerifyProgress] = useState("");
   const [exportColumns, setExportColumns] = useState(
     exportColumnOptions.map((entry) => entry.key)
   );
@@ -618,6 +620,14 @@ const TrainingEventRegistrations = () => {
   );
   const allFilteredSelected =
     filteredIds.length > 0 && filteredIds.every((entry) => selectedIds.includes(entry));
+  const selectedRows = useMemo(() => {
+    const selectedSet = new Set(selectedIds.map((entry) => String(entry)));
+    return rows.filter((entry) => selectedSet.has(String(entry?._id || "")));
+  }, [rows, selectedIds]);
+  const selectedVerifiableRows = useMemo(
+    () => selectedRows.filter((entry) => canRetryPmdcVerification(entry)),
+    [selectedRows]
+  );
 
   const toggleSelectAllFiltered = () => {
     setSelectedIds((prev) => {
@@ -763,82 +773,179 @@ const TrainingEventRegistrations = () => {
     }
   };
 
+  const saveBrowserPmdcVerification = async (row, browserVerification) => {
+    const saveResp = await fetch(
+      `${API_BASE_URL}/training-events/admin/registrations/${row._id}/browser-pmdc-verification`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(browserVerification),
+      }
+    );
+    const saveData = await saveResp.json().catch(() => ({}));
+    if (!saveResp.ok) {
+      const parsed = parseApiError(saveData, "Failed to save browser PMDC verification");
+      throw new Error(parsed.issues.join(" ") || parsed.summary);
+    }
+    updateRow(row._id, saveData?.data || {});
+    return saveData?.data || null;
+  };
+
+  const requestServerPmdcRetry = async (row) => {
+    const resp = await fetch(
+      `${API_BASE_URL}/training-events/admin/registrations/${row._id}/retry-verification`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+      }
+    );
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const parsed = parseApiError(data, "Failed to retry PMDC verification");
+      throw new Error(parsed.issues.join(" ") || parsed.summary);
+    }
+    updateRow(row._id, data?.data || {});
+    return data?.data || null;
+  };
+
+  const runDirectPmdcVerification = async (row, { allowServerFallback = true } = {}) => {
+    let browserVerification = null;
+    try {
+      browserVerification = await verifyPmdcInBrowser({
+        pmdcNumber: row?.pmdcNumber,
+        doctorName: row?.doctorName,
+      });
+    } catch (browserError) {
+      browserVerification = {
+        outcome: "failed",
+        reason: `Browser PMDC lookup failed: ${browserError?.message || "request failed"}`,
+        similarity: 0,
+        verifiedName: "",
+        httpStatus: 0,
+        endpointUsed: "browser_pmdc_direct",
+      };
+    }
+
+    if (browserVerification?.outcome && browserVerification.outcome !== "failed") {
+      await saveBrowserPmdcVerification(row, browserVerification);
+      return {
+        source: "browser",
+        outcome: browserVerification.outcome,
+        reason: browserVerification.reason,
+      };
+    }
+
+    if (!allowServerFallback) {
+      return {
+        source: "browser",
+        outcome: "failed",
+        reason: browserVerification?.reason || "Browser PMDC lookup failed",
+      };
+    }
+
+    const retryData = await requestServerPmdcRetry(row);
+    return {
+      source: "server",
+      outcome: retryData?.retryResult?.processed ? "queued_processed" : "queued",
+      reason: browserVerification?.reason || retryData?.retryResult?.reason || "Queued for server PMDC retry",
+    };
+  };
+
+  const bulkVerifySelectedPmdc = async () => {
+    if (bulkVerifyBusy || actionBusyId) return;
+    if (!selectedIds.length) {
+      alert("Select at least one registration first.");
+      return;
+    }
+    if (!selectedVerifiableRows.length) {
+      alert("Selected registrations are already verified or final, so there is nothing to verify.");
+      return;
+    }
+
+    setBulkVerifyBusy(true);
+    setActionBusyId("bulk-pmdc");
+    setBulkVerifyProgress(`0/${selectedVerifiableRows.length}`);
+
+    const summary = {
+      verified: 0,
+      saved: 0,
+      queued: 0,
+      failed: 0,
+      skipped: selectedIds.length - selectedVerifiableRows.length,
+    };
+
+    try {
+      for (let index = 0; index < selectedVerifiableRows.length; index += 1) {
+        const row = selectedVerifiableRows[index];
+        setBulkVerifyProgress(`${index + 1}/${selectedVerifiableRows.length}`);
+        try {
+          const result = await runDirectPmdcVerification(row, { allowServerFallback: true });
+          if (result.outcome === "verified") {
+            summary.verified += 1;
+          } else if (result.source === "browser") {
+            summary.saved += 1;
+          } else {
+            summary.queued += 1;
+          }
+        } catch {
+          summary.failed += 1;
+        }
+      }
+
+      await fetchRows();
+      await fetchPmdcStats();
+      alert(
+        [
+          `PMDC batch verification completed for ${selectedVerifiableRows.length} selected registrations.`,
+          `Verified: ${summary.verified}`,
+          `Saved for review: ${summary.saved}`,
+          `Queued for server retry: ${summary.queued}`,
+          `Failed: ${summary.failed}`,
+          summary.skipped ? `Skipped already final/verified: ${summary.skipped}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
+    } finally {
+      setBulkVerifyBusy(false);
+      setActionBusyId("");
+      setBulkVerifyProgress("");
+    }
+  };
+
   const retryPmdcVerification = async (row) => {
     if (!row?._id || actionBusyId) return;
     if (!canRetryPmdcVerification(row)) return;
     setActionBusyId(String(row._id));
     try {
-      let browserVerification = null;
-      try {
-        browserVerification = await verifyPmdcInBrowser({
-          pmdcNumber: row?.pmdcNumber,
-          doctorName: row?.doctorName,
-        });
-      } catch (browserError) {
-        browserVerification = {
-          outcome: "failed",
-          reason: `Browser PMDC lookup failed: ${browserError?.message || "request failed"}`,
-          similarity: 0,
-          verifiedName: "",
-          httpStatus: 0,
-          endpointUsed: "browser_pmdc_direct",
-        };
-      }
-
-      if (browserVerification?.outcome && browserVerification.outcome !== "failed") {
-        const saveResp = await fetch(
-          `${API_BASE_URL}/training-events/admin/registrations/${row._id}/browser-pmdc-verification`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              ...getAuthHeaders(),
-            },
-            body: JSON.stringify(browserVerification),
-          }
-        );
-        const saveData = await saveResp.json().catch(() => ({}));
-        if (!saveResp.ok) {
-          const parsed = parseApiError(saveData, "Failed to save browser PMDC verification");
-          throw new Error(parsed.issues.join(" ") || parsed.summary);
-        }
-        updateRow(row._id, saveData?.data || {});
+      const result = await runDirectPmdcVerification(row, { allowServerFallback: true });
+      if (result.source === "browser") {
         await fetchPmdcStats();
         alert(
-          browserVerification.outcome === "verified"
+          result.outcome === "verified"
             ? "PMDC verified directly from browser. Registration is waiting for admin approval."
             : "PMDC browser verification saved for review."
         );
         return;
       }
 
-      const resp = await fetch(
-        `${API_BASE_URL}/training-events/admin/registrations/${row._id}/retry-verification`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-        }
-      );
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        const parsed = parseApiError(data, "Failed to retry PMDC verification");
-        throw new Error(parsed.issues.join(" ") || parsed.summary);
-      }
-      updateRow(row._id, data?.data || {});
       await fetchPmdcStats();
-      if (data?.data?.retryResult?.processed) {
+      if (result.outcome === "queued_processed") {
         alert(
           `Server retry processed. Browser lookup did not verify first: ${
-            browserVerification?.reason || "unknown browser result"
+            result.reason || "unknown browser result"
           }`
         );
       } else {
         alert(
           `Server retry queued. Browser lookup did not verify first: ${
-            browserVerification?.reason || "unknown browser result"
+            result.reason || "unknown browser result"
           }`
         );
       }
@@ -1026,6 +1133,17 @@ const TrainingEventRegistrations = () => {
           <button className="btn secondary" type="button" onClick={forceResetPmdcLocks}>
             Force Reset PMDC Locks
           </button>
+          <button
+            className="btn"
+            type="button"
+            onClick={bulkVerifySelectedPmdc}
+            disabled={bulkVerifyBusy || selectedVerifiableRows.length === 0}
+            title="Directly verify PMDC numbers for all selected registrations"
+          >
+            {bulkVerifyBusy
+              ? `Verifying ${bulkVerifyProgress}`
+              : `Verify Selected PMDC (${selectedVerifiableRows.length})`}
+          </button>
           <button className="btn" type="button" onClick={() => setShowExportModal(true)}>
             Export Registrations
           </button>
@@ -1182,6 +1300,17 @@ const TrainingEventRegistrations = () => {
           <button className="btn secondary" type="button" onClick={() => setShowExportModal(true)}>
             Export
           </button>
+          <button
+            className="btn"
+            type="button"
+            onClick={bulkVerifySelectedPmdc}
+            disabled={bulkVerifyBusy || selectedVerifiableRows.length === 0}
+            title="Directly verify PMDC numbers for all selected registrations"
+          >
+            {bulkVerifyBusy
+              ? `Verifying ${bulkVerifyProgress}`
+              : `Verify Selected PMDC (${selectedVerifiableRows.length})`}
+          </button>
           <span className="muted">Selected: {selectedIds.length}</span>
           <span className="muted">Showing {filteredRows.length} of {rows.length} registrations</span>
         </div>
@@ -1321,7 +1450,7 @@ const TrainingEventRegistrations = () => {
                           type="button"
                           title="Approve registration"
                           onClick={() => approveRegistration(row)}
-                          disabled={actionBusyId === String(row?._id)}
+                          disabled={Boolean(actionBusyId)}
                           style={{ minWidth: 54, background: "#16a34a", borderColor: "#16a34a" }}
                         >
                           ✅
@@ -1331,7 +1460,7 @@ const TrainingEventRegistrations = () => {
                           type="button"
                           title="Reject registration"
                           onClick={() => rejectRegistration(row)}
-                          disabled={actionBusyId === String(row?._id)}
+                          disabled={Boolean(actionBusyId)}
                           style={{ minWidth: 54, color: "#b91c1c", borderColor: "#fecaca" }}
                         >
                           ❌
@@ -1342,7 +1471,7 @@ const TrainingEventRegistrations = () => {
                             type="button"
                             title="Retry PMDC verification"
                             onClick={() => retryPmdcVerification(row)}
-                            disabled={actionBusyId === String(row?._id)}
+                            disabled={Boolean(actionBusyId)}
                             style={{ minWidth: 54 }}
                           >
                             ↻
@@ -1353,7 +1482,7 @@ const TrainingEventRegistrations = () => {
                           type="button"
                           title="PMDC diagnostics"
                           onClick={() => showPmdcDiagnostics(row)}
-                          disabled={actionBusyId === String(row?._id)}
+                          disabled={Boolean(actionBusyId)}
                           style={{ minWidth: 54 }}
                         >
                           ?
@@ -1363,7 +1492,7 @@ const TrainingEventRegistrations = () => {
                           type="button"
                           title="Delete registration (test cleanup)"
                           onClick={() => deleteRegistration(row)}
-                          disabled={actionBusyId === String(row?._id)}
+                          disabled={Boolean(actionBusyId)}
                           style={{ minWidth: 54, color: "#b91c1c", borderColor: "#fecaca" }}
                         >
                           🗑
