@@ -380,3 +380,266 @@
     grid-template-columns: 1fr;
   }
 }
+
+.payment-proof-dropzone {
+  margin-top: 12px;
+  padding: 16px;
+  border: 2px dashed #c7d2e3;
+  border-radius: 12px;
+  background: #f8fbff;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.payment-proof-dropzone.is-dragging {
+  border-color: #0f766e;
+  background: #ebfffa;
+}
+
+.payment-proof-dropzone.is-disabled {
+  opacity: 0.65;
+}
+
+.payment-proof-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.payment-proof-subtitle {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 12px;
+}
+
+.payment-proof-controls {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.payment-proof-hint {
+  margin: 10px 0 0;
+  color: #52617a;
+  font-size: 11px;
+}
+
+.payment-proof-error {
+  margin: 10px 0 0;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.payment-audit-log {
+  display: grid;
+  gap: 8px;
+}
+
+.payment-audit-item {
+  border: 1px solid #dbe5f3;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.payment-audit-item .top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.payment-audit-item .top strong {
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.payment-audit-item .top span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.payment-audit-item .meta {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.payment-audit-item .meta span {
+  color: #52617a;
+  font-size: 11px;
+}
+
+.payment-audit-item p {
+  margin: 6px 0 0;
+  color: #334155;
+  font-size: 12px;
+}
+
+.payment-proof-gallery {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.payment-proof-card {
+  border: 1px solid #dbe5f3;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.payment-proof-preview-btn {
+  width: 100%;
+  border: 1px solid #dbe5f3;
+  border-radius: 8px;
+  padding: 0;
+  background: #f8fafc;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.payment-proof-preview-btn img {
+  display: block;
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+}
+
+.payment-proof-meta {
+  margin-top: 8px;
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  color: #52617a;
+}
+
+.payment-proof-meta .name {
+  color: #0f172a;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.payment-proof-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.payment-proof-actions .btn {
+  padding: 6px 8px;
+  min-width: 38px;
+}
+
+.upload-progress-wrap {
+  margin-top: 12px;
+}
+
+.upload-progress-wrap p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #52617a;
+}
+
+.upload-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.upload-progress-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #0f766e 0%, #0ea5e9 100%);
+}
+
+.proof-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.proof-readonly-item {
+  border: 1px solid #dbe5f3;
+  border-radius: 10px;
+  background: #fff;
+  padding: 6px;
+  text-align: left;
+  cursor: zoom-in;
+}
+
+.proof-readonly-item img {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.proof-readonly-item span {
+  display: block;
+  margin-top: 6px;
+  color: #52617a;
+  font-size: 10px;
+}
+
+.proof-preview-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.8);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.proof-preview-modal-body {
+  max-width: min(900px, 92vw);
+  max-height: 92vh;
+  position: relative;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.proof-preview-modal-body img {
+  max-width: 100%;
+  max-height: calc(92vh - 64px);
+  display: block;
+  margin: 0 auto;
+}
+
+.proof-preview-close {
+  border: 1px solid #dbe5f3;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .payment-proof-controls .btn {
+    width: 100%;
+  }
+
+  .payment-proof-actions {
+    flex-wrap: wrap;
+  }
+
+  .proof-readonly-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

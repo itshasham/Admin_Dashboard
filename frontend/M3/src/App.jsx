@@ -25,6 +25,11 @@ const AccessoryList = lazy(() => import("./pages/accessories/AccessoryList"));
 const AccessoryForm = lazy(() => import("./pages/accessories/AccessoryForm"));
 const BlogList = lazy(() => import("./pages/blogs/BlogList"));
 const BlogForm = lazy(() => import("./pages/blogs/BlogForm"));
+const TrainingEventList = lazy(() => import("./pages/training-events/TrainingEventList"));
+const TrainingEventForm = lazy(() => import("./pages/training-events/TrainingEventForm"));
+const TrainingEventRegistrations = lazy(() =>
+  import("./pages/training-events/TrainingEventRegistrations")
+);
 
 const OrderList = lazy(() => import("./pages/orders/OrderList"));
 const OrderDetail = lazy(() => import("./pages/orders/OrderDetail"));
@@ -119,6 +124,17 @@ const App = () => {
           <Route path="/admin/blogs" element={<ProtectedRoute><BlogList /></ProtectedRoute>} />
           <Route path="/admin/blogs/new" element={<ProtectedRoute><BlogForm /></ProtectedRoute>} />
           <Route path="/admin/blogs/:id" element={<ProtectedRoute><BlogForm /></ProtectedRoute>} />
+          <Route path="/admin/training-events" element={<ProtectedRoute><TrainingEventList /></ProtectedRoute>} />
+          <Route path="/admin/training-events/new" element={<ProtectedRoute><TrainingEventForm /></ProtectedRoute>} />
+          <Route
+            path="/admin/training-events/registrations"
+            element={<ProtectedRoute><TrainingEventRegistrations /></ProtectedRoute>}
+          />
+          <Route path="/admin/training-events/:id" element={<ProtectedRoute><TrainingEventForm /></ProtectedRoute>} />
+          <Route
+            path="/admin/training-events/:id/registrations"
+            element={<ProtectedRoute><TrainingEventRegistrations /></ProtectedRoute>}
+          />
 
           {/* Order Management (protected) */}
           <Route path="/admin/orders" element={<ProtectedRoute><OrderList /></ProtectedRoute>} />

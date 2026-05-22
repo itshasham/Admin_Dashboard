@@ -3,6 +3,32 @@ import { useParams } from "react-router-dom";
 import "./coupon.css";
 import { API_BASE_URL } from '../../config/api';
 
+const PRODUCT_SCOPE_ALL_NON_CLINICAL = "all-non-clinical-non-accessories";
+const PRODUCT_SCOPE_ALL_PRODUCTS = "all products";
+
+const PRODUCT_SCOPE_OPTIONS = [
+  {
+    value: PRODUCT_SCOPE_ALL_NON_CLINICAL,
+    label: "all products except clinical & accessories",
+  },
+  { value: PRODUCT_SCOPE_ALL_PRODUCTS, label: "all products" },
+];
+
+const formatProductScopeLabel = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === PRODUCT_SCOPE_ALL_NON_CLINICAL) {
+    return "All products except clinical & accessories";
+  }
+  if (
+    normalized === "all" ||
+    normalized === "all product" ||
+    normalized === PRODUCT_SCOPE_ALL_PRODUCTS
+  ) {
+    return "All products";
+  }
+  return value || "All products";
+};
+
 const emptyCoupon = {
   title: "",
   logo: "",
@@ -10,8 +36,15 @@ const emptyCoupon = {
   startTime: "",
   endTime: "",
   discountPercentage: 0,
+  couponType: "standard",
+  customerDiscountAmount: 100,
+  affiliateCommissionAmount: 150,
+  affiliateName: "",
+  affiliateEmail: "",
+  affiliatePhone: "",
+  affiliatePaymentDetails: "",
   minimumAmount: 0,
-  productType: "",
+  productType: PRODUCT_SCOPE_ALL_NON_CLINICAL,
   status: "active",
 };
 
@@ -49,7 +82,7 @@ const toISO = (local) => {
   try { return new Date(local).toISOString(); } catch { return undefined; }
 };
 
-const Clock = ({ hours, minutes }) => {
+  const Clock = ({ hours, minutes }) => {
   const hourDeg = useMemo(() => ((hours % 12) + minutes / 60) * 30, [hours, minutes]);
   const minDeg = useMemo(() => minutes * 6, [minutes]);
   return (
@@ -61,6 +94,11 @@ const Clock = ({ hours, minutes }) => {
   );
 };
 
+const formatOffer = (coupon) =>
+  coupon.couponType === "affiliate"
+    ? `Rs ${Number(coupon.customerDiscountAmount || 100)} off`
+    : `${coupon.discountPercentage || 0}% off`;
+
 const CouponForm = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
@@ -69,6 +107,30 @@ const CouponForm = () => {
   const [error, setError] = useState("");
   const [productTypes, setProductTypes] = useState([]);
   const [role, setRole] = useState("");
+  const productTypeOptions = useMemo(() => {
+    const optionMap = new Map();
+    PRODUCT_SCOPE_OPTIONS.forEach((opt) => {
+      optionMap.set(String(opt.value).trim().toLowerCase(), opt);
+    });
+    productTypes.forEach((value) => {
+      const cleanValue = String(value || "").trim();
+      if (!cleanValue) return;
+      const key = cleanValue.toLowerCase();
+      if (!optionMap.has(key)) {
+        optionMap.set(key, { value: cleanValue, label: cleanValue });
+      }
+    });
+
+    const currentValue = String(coupon?.productType || "").trim();
+    if (currentValue) {
+      const key = currentValue.toLowerCase();
+      if (!optionMap.has(key)) {
+        optionMap.set(key, { value: currentValue, label: currentValue });
+      }
+    }
+
+    return Array.from(optionMap.values());
+  }, [coupon?.productType, productTypes]);
 
   useEffect(() => {
     try {
@@ -123,8 +185,8 @@ const CouponForm = () => {
       const arr = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
       const types = Array.from(new Set(arr.map(p => (p?.productType || "").trim()).filter(Boolean)));
       setProductTypes(types);
-      if (!isEdit && !coupon.productType && types.length) {
-        setCoupon(prev => ({ ...prev, productType: types[0] }));
+      if (!isEdit && !coupon.productType) {
+        setCoupon(prev => ({ ...prev, productType: PRODUCT_SCOPE_ALL_NON_CLINICAL }));
       }
     } catch {
       // ignore
@@ -152,8 +214,15 @@ const CouponForm = () => {
             startTime: startLocal,
             endTime: endLocal,
             discountPercentage: payload.discountPercentage ?? 0,
+            couponType: payload.couponType || "standard",
+            customerDiscountAmount: payload.customerDiscountAmount ?? 100,
+            affiliateCommissionAmount: payload.affiliateCommissionAmount ?? 150,
+            affiliateName: payload.affiliateName || "",
+            affiliateEmail: payload.affiliateEmail || "",
+            affiliatePhone: payload.affiliatePhone || "",
+            affiliatePaymentDetails: payload.affiliatePaymentDetails || "",
             minimumAmount: payload.minimumAmount ?? 0,
-            productType: payload.productType || "",
+            productType: payload.productType || PRODUCT_SCOPE_ALL_NON_CLINICAL,
             status: payload.status || "active",
           });
           const sD = new Date(startLocal); setStartH(sD.getHours()); setStartM(sD.getMinutes());
@@ -230,6 +299,13 @@ const CouponForm = () => {
         startTime: toISO(coupon.startTime),
         endTime: toISO(coupon.endTime),
         discountPercentage: Number(coupon.discountPercentage) || 0,
+        couponType: coupon.couponType || "standard",
+        customerDiscountAmount: Number(coupon.customerDiscountAmount) || 0,
+        affiliateCommissionAmount: Number(coupon.affiliateCommissionAmount) || 0,
+        affiliateName: coupon.affiliateName,
+        affiliateEmail: coupon.affiliateEmail,
+        affiliatePhone: coupon.affiliatePhone,
+        affiliatePaymentDetails: coupon.affiliatePaymentDetails,
         minimumAmount: Number(coupon.minimumAmount) || 0,
         productType: coupon.productType,
         status: coupon.status,
@@ -266,7 +342,7 @@ const CouponForm = () => {
             </div>
             <div className="coupon-preview-code">{coupon.couponCode || "YOURCODE"}</div>
             <div className="coupon-preview-foot">
-              <span>{coupon.discountPercentage || 0}% off</span>
+              <span>{formatOffer(coupon)}</span>
               <span>Min {coupon.minimumAmount || 0}</span>
             </div>
           </div>
@@ -283,7 +359,7 @@ const CouponForm = () => {
             </div>
             <div className="coupon-preview-code">{coupon.couponCode || "YOURCODE"}</div>
             <div className="coupon-preview-foot">
-              <span>{coupon.discountPercentage || 0}% off</span>
+              <span>{formatOffer(coupon)}</span>
               <span>Min {coupon.minimumAmount || 0}</span>
             </div>
             <div className="coupon-preview-divider" />
@@ -298,7 +374,7 @@ const CouponForm = () => {
               </div>
               <div>
                 <span>Type</span>
-                <strong>{coupon.productType || "All products"}</strong>
+                <strong>{formatProductScopeLabel(coupon.productType)}</strong>
               </div>
             </div>
           </div>
@@ -330,6 +406,15 @@ const CouponForm = () => {
               </div>
               <div className="form-table">
                 <div className="form-row">
+                  <div className="form-cell">Coupon Type</div>
+                  <div className="form-cell">
+                    <select name="couponType" value={coupon.couponType} onChange={handleChange}>
+                      <option value="standard">standard</option>
+                      <option value="affiliate">affiliate</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="form-row">
                   <div className="form-cell">Title</div>
                   <div className="form-cell"><input name="title" value={coupon.title} onChange={handleChange} required /></div>
                 </div>
@@ -337,16 +422,56 @@ const CouponForm = () => {
                   <div className="form-cell">Coupon Code</div>
                   <div className="form-cell"><input name="couponCode" value={coupon.couponCode} onChange={handleChange} required /></div>
                 </div>
-                <div className="form-row">
-                  <div className="form-cell">Discount %</div>
-                  <div className="form-cell"><input name="discountPercentage" type="number" value={coupon.discountPercentage} onChange={handleChange} required /></div>
-                </div>
+                {coupon.couponType === "affiliate" ? (
+                  <>
+                    <div className="form-row">
+                      <div className="form-cell">Customer Discount</div>
+                      <div className="form-cell"><input name="customerDiscountAmount" type="number" min="0" value={coupon.customerDiscountAmount} onChange={handleChange} required /></div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-cell">Affiliate Commission</div>
+                      <div className="form-cell"><input name="affiliateCommissionAmount" type="number" min="0" value={coupon.affiliateCommissionAmount} onChange={handleChange} required /></div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="form-row">
+                    <div className="form-cell">Discount %</div>
+                    <div className="form-cell"><input name="discountPercentage" type="number" value={coupon.discountPercentage} onChange={handleChange} required /></div>
+                  </div>
+                )}
                 <div className="form-row">
                   <div className="form-cell">Minimum Amount</div>
                   <div className="form-cell"><input name="minimumAmount" type="number" value={coupon.minimumAmount} onChange={handleChange} /></div>
                 </div>
               </div>
             </div>
+
+            {coupon.couponType === "affiliate" && (
+              <div className="section appear">
+                <div className="section-title">
+                  <h3>Affiliate Person</h3>
+                  <span className="hint">Monthly payout details</span>
+                </div>
+                <div className="form-table">
+                  <div className="form-row">
+                    <div className="form-cell">Name</div>
+                    <div className="form-cell"><input name="affiliateName" value={coupon.affiliateName} onChange={handleChange} required /></div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-cell">Email</div>
+                    <div className="form-cell"><input name="affiliateEmail" type="email" value={coupon.affiliateEmail} onChange={handleChange} /></div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-cell">Phone</div>
+                    <div className="form-cell"><input name="affiliatePhone" value={coupon.affiliatePhone} onChange={handleChange} /></div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-cell">Payment Details</div>
+                    <div className="form-cell"><input name="affiliatePaymentDetails" value={coupon.affiliatePaymentDetails} onChange={handleChange} placeholder="Bank, JazzCash, Easypaisa, notes" /></div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="section appear">
               <div className="section-title">
@@ -357,15 +482,11 @@ const CouponForm = () => {
                 <div className="form-row">
                   <div className="form-cell">Product Type</div>
                   <div className="form-cell">
-                    {productTypes.length ? (
-                      <select name="productType" value={coupon.productType} onChange={handleChange}>
-                        {productTypes.map((pt) => (
-                          <option key={pt} value={pt}>{pt}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input name="productType" value={coupon.productType} onChange={handleChange} placeholder="e.g., electronics" />
-                    )}
+                    <select name="productType" value={coupon.productType} onChange={handleChange}>
+                      {productTypeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="form-row">

@@ -1,7 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import "./order.css";
 import { API_BASE_URL } from '../../config/api';
+
+const MAX_PAYMENT_PROOF_SIZE = 5 * 1024 * 1024;
+const MAX_PAYMENT_PROOF_IMAGES = 5;
+const ALLOWED_PAYMENT_PROOF_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
 
 const OrderDetail = () => {
   const { id } = useParams();
@@ -21,6 +25,13 @@ const OrderDetail = () => {
   const [paymentReceivedIn, setPaymentReceivedIn] = useState("");
   const [paymentTransactionReference, setPaymentTransactionReference] = useState("");
   const [paymentVerificationNotes, setPaymentVerificationNotes] = useState("");
+  const [paymentProofImages, setPaymentProofImages] = useState([]);
+  const [paymentProofError, setPaymentProofError] = useState("");
+  const [paymentUploadProgress, setPaymentUploadProgress] = useState(0);
+  const [draggingProofs, setDraggingProofs] = useState(false);
+  const [previewProofUrl, setPreviewProofUrl] = useState("");
+  const paymentProofInputRef = useRef(null);
+  const paymentProofImagesRef = useRef([]);
   const courierCompanies = ["DHL", "TCS", "FedEx", "Blue Dart", "Leopards", "PostEx", "Local"];
   const normalizeStatus = (value) => {
     const statusValue = String(value || "").toLowerCase();
@@ -37,6 +48,126 @@ const OrderDetail = () => {
     const key = normalizeCourierKey(value);
     return key === "local" || key === "localdelivery";
   };
+  const isOnlinePaymentMethod = (value = "") => {
+    const normalized = String(value || "").toLowerCase().trim();
+    if (!normalized) return false;
+    if (
+      normalized.includes("cod") ||
+      normalized.includes("cash on delivery") ||
+      normalized.includes("offline")
+    ) {
+      return false;
+    }
+    return (
+      normalized.includes("online") ||
+      normalized.includes("card") ||
+      normalized.includes("wallet") ||
+      normalized.includes("bank") ||
+      normalized.includes("stripe") ||
+      normalized.includes("paypal") ||
+      normalized.includes("jazzcash") ||
+      normalized.includes("easypaisa")
+    );
+  };
+  const isProofUploadEnabled = () =>
+    String(paymentVerificationStatus || "").toLowerCase() === "verified" &&
+    String(paymentReceivedMethod || "").toLowerCase() === "online";
+  const fmtFileSize = (size = 0) => {
+    const value = Number(size || 0);
+    if (!Number.isFinite(value) || value <= 0) return "—";
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+  };
+  const getProofKey = (proof = {}) => String(proof?.publicId || proof?.url || "").trim();
+  const normalizeExistingProofImages = (proofImages = []) =>
+    proofImages
+      .filter((item) => String(item?.url || "").trim())
+      .map((item, idx) => ({
+        id: `existing-${idx}-${Date.now()}`,
+        source: "existing",
+        url: String(item.url || "").trim(),
+        publicId: String(item.publicId || "").trim(),
+        originalName: String(item.originalName || "Proof Image"),
+        mimeType: String(item.mimeType || ""),
+        size: Number(item.size || 0),
+        uploadedAt: item.uploadedAt || null,
+        file: null,
+      }));
+  const revokeObjectUrlIfNeeded = (proofItem = {}) => {
+    if (proofItem?.source === "new" && String(proofItem?.url || "").startsWith("blob:")) {
+      URL.revokeObjectURL(proofItem.url);
+    }
+  };
+  const createProofItemFromFile = (file) => ({
+    id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    source: "new",
+    url: URL.createObjectURL(file),
+    publicId: "",
+    originalName: String(file?.name || "proof-image"),
+    mimeType: String(file?.type || ""),
+    size: Number(file?.size || 0),
+    uploadedAt: new Date().toISOString(),
+    file,
+  });
+  const validateProofFile = (file) => {
+    const fileType = String(file?.type || "").toLowerCase();
+    if (!ALLOWED_PAYMENT_PROOF_TYPES.has(fileType)) {
+      return "Only JPG, JPEG, PNG, and WEBP images are supported.";
+    }
+    if (Number(file?.size || 0) > MAX_PAYMENT_PROOF_SIZE) {
+      return "Each image must be 5MB or less.";
+    }
+    return "";
+  };
+  const tryCompressProofImage = (file) =>
+    new Promise((resolve) => {
+      try {
+        if (!file || Number(file.size || 0) < 1.8 * 1024 * 1024) {
+          resolve(file);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            const maxDimension = 1800;
+            const ratio = Math.min(1, maxDimension / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(img.width * ratio));
+            canvas.height = Math.max(1, Math.round(img.height * ratio));
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+              resolve(file);
+              return;
+            }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(
+              (blob) => {
+                if (!blob || blob.size >= file.size) {
+                  resolve(file);
+                  return;
+                }
+                const compressed = new File([blob], file.name, {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                });
+                resolve(compressed);
+              },
+              "image/jpeg",
+              0.82
+            );
+          };
+          img.onerror = () => resolve(file);
+          img.src = String(reader.result || "");
+        };
+        reader.onerror = () => resolve(file);
+        reader.readAsDataURL(file);
+      } catch {
+        resolve(file);
+      }
+    });
 
   const getAuthHeaders = () => {
     try {
@@ -45,6 +176,94 @@ const OrderDetail = () => {
     } catch {
       return {};
     }
+  };
+
+  const appendProofFiles = async (incomingFiles = []) => {
+    const files = Array.from(incomingFiles || []);
+    if (!files.length) return;
+
+    setPaymentProofError("");
+    const previousCount = paymentProofImagesRef.current.length;
+    const availableSlots = Math.max(0, MAX_PAYMENT_PROOF_IMAGES - previousCount);
+    if (availableSlots <= 0) {
+      setPaymentProofError(`Maximum ${MAX_PAYMENT_PROOF_IMAGES} proof images are allowed.`);
+      return;
+    }
+
+    const acceptedFiles = files.slice(0, availableSlots);
+    const rejectedMessages = [];
+    const nextItems = [];
+
+    for (const file of acceptedFiles) {
+      const validationError = validateProofFile(file);
+      if (validationError) {
+        rejectedMessages.push(`${file?.name || "File"}: ${validationError}`);
+        continue;
+      }
+      const optimizedFile = await tryCompressProofImage(file);
+      const optimizedValidationError = validateProofFile(optimizedFile);
+      if (optimizedValidationError) {
+        rejectedMessages.push(`${file?.name || "File"}: ${optimizedValidationError}`);
+        continue;
+      }
+      nextItems.push(createProofItemFromFile(optimizedFile));
+    }
+
+    if (files.length > availableSlots) {
+      rejectedMessages.push(`Only ${availableSlots} more image(s) can be added.`);
+    }
+
+    if (rejectedMessages.length) {
+      setPaymentProofError(rejectedMessages.join(" "));
+    }
+
+    if (nextItems.length) {
+      setPaymentProofImages((prev) => [...prev, ...nextItems]);
+    }
+  };
+
+  const removeProofImageById = (itemId) => {
+    setPaymentProofImages((prev) => {
+      const target = prev.find((item) => item.id === itemId);
+      if (target) revokeObjectUrlIfNeeded(target);
+      return prev.filter((item) => item.id !== itemId);
+    });
+  };
+
+  const clearNewProofImages = () => {
+    setPaymentProofImages((prev) => {
+      prev.filter((item) => item.source === "new").forEach(revokeObjectUrlIfNeeded);
+      return prev.filter((item) => item.source !== "new");
+    });
+  };
+
+  const moveProofImage = (fromIndex, direction) => {
+    setPaymentProofImages((prev) => {
+      const toIndex = fromIndex + direction;
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= prev.length || toIndex >= prev.length) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const handleProofInputChange = async (event) => {
+    if (!isProofUploadEnabled()) return;
+    const files = event?.target?.files;
+    await appendProofFiles(files);
+    if (paymentProofInputRef.current) {
+      paymentProofInputRef.current.value = "";
+    }
+  };
+
+  const handleProofDrop = async (event) => {
+    event.preventDefault();
+    setDraggingProofs(false);
+    if (!isProofUploadEnabled()) return;
+    await appendProofFiles(event?.dataTransfer?.files || []);
   };
 
   const coerceOrder = (payload) => {
@@ -205,6 +424,12 @@ const OrderDetail = () => {
           setPaymentReceivedIn(String(paymentVerification?.receivedIn || ""));
           setPaymentTransactionReference(String(paymentVerification?.transactionReference || ""));
           setPaymentVerificationNotes(String(paymentVerification?.notes || ""));
+          setPaymentProofImages((prev) => {
+            prev.forEach(revokeObjectUrlIfNeeded);
+            return normalizeExistingProofImages(paymentVerification?.proofImages || []);
+          });
+          setPaymentProofError("");
+          setPaymentUploadProgress(0);
           
         } else {
           // EMERGENCY FALLBACK: If all else fails, create a minimal order object
@@ -236,6 +461,12 @@ const OrderDetail = () => {
           setPaymentReceivedIn("");
           setPaymentTransactionReference("");
           setPaymentVerificationNotes("");
+          setPaymentProofImages((prev) => {
+            prev.forEach(revokeObjectUrlIfNeeded);
+            return [];
+          });
+          setPaymentProofError("");
+          setPaymentUploadProgress(0);
         }
       } else {
         // EMERGENCY FALLBACK: Create minimal order from ID only
@@ -264,6 +495,12 @@ const OrderDetail = () => {
         setPaymentReceivedIn("");
         setPaymentTransactionReference("");
         setPaymentVerificationNotes("");
+        setPaymentProofImages((prev) => {
+          prev.forEach(revokeObjectUrlIfNeeded);
+          return [];
+        });
+        setPaymentProofError("");
+        setPaymentUploadProgress(0);
       }
     } catch (err) {
       console.error("Failed to load order:", err);
@@ -367,9 +604,15 @@ const OrderDetail = () => {
         alert("Please enter where payment was received.");
         return;
       }
+      if (String(paymentReceivedMethod || "").toLowerCase() === "online" && paymentProofImages.length === 0) {
+        setPaymentProofError("Payment proof image is required for online payment verification.");
+        alert("Please upload at least one payment proof image.");
+        return;
+      }
     }
 
     setPaymentSaving(true);
+    setPaymentUploadProgress(0);
     try {
       const payload = {
         status: verificationStatus,
@@ -391,25 +634,64 @@ const OrderDetail = () => {
             : "",
         notes: String(paymentVerificationNotes || "").trim(),
       };
+      const proofKeysToKeep = paymentProofImages
+        .filter((item) => item.source === "existing")
+        .map((item) => getProofKey(item))
+        .filter(Boolean);
+      const newProofFiles = paymentProofImages
+        .filter((item) => item.source === "new" && item.file)
+        .map((item) => item.file);
 
-      const resp = await fetch(`${API_BASE_URL}/order/admin/orders/${id}/payment-verification`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify(payload),
+      const formData = new FormData();
+      formData.append("status", payload.status);
+      formData.append("amountReceived", String(payload.amountReceived));
+      formData.append("receivedMethod", payload.receivedMethod);
+      formData.append("receivedIn", payload.receivedIn);
+      formData.append("transactionReference", payload.transactionReference);
+      formData.append("notes", payload.notes);
+      formData.append("existingProofImageKeys", JSON.stringify(proofKeysToKeep));
+      newProofFiles.forEach((file) => formData.append("paymentProofImages", file));
+
+      const authHeader = getAuthHeaders()?.Authorization;
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PATCH", `${API_BASE_URL}/order/admin/orders/${id}/payment-verification`);
+        if (authHeader) {
+          xhr.setRequestHeader("Authorization", authHeader);
+        }
+
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          const progress = Math.round((event.loaded / event.total) * 100);
+          setPaymentUploadProgress(progress);
+        };
+
+        xhr.onload = () => {
+          let responseJson = {};
+          try {
+            responseJson = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+          } catch {
+            responseJson = {};
+          }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(responseJson);
+            return;
+          }
+          reject(new Error(responseJson?.message || "Failed to update payment verification"));
+        };
+
+        xhr.onerror = () => reject(new Error("Network error while updating payment verification"));
+        xhr.send(formData);
       });
-      const isJson = resp.headers.get("content-type")?.includes("application/json");
-      const data = isJson ? await resp.json().catch(() => ({})) : {};
-
-      if (!resp.ok) {
-        throw new Error(data?.message || "Failed to update payment verification");
-      }
 
       await fetchOrder();
+      setPaymentProofError("");
       alert("Payment verification updated successfully.");
     } catch (err) {
       alert(err.message || "Failed to update payment verification");
     } finally {
       setPaymentSaving(false);
+      setPaymentUploadProgress(0);
     }
   };
 
@@ -638,6 +920,44 @@ const OrderDetail = () => {
     }
   }, []);
 
+  useEffect(() => {
+    paymentProofImagesRef.current = paymentProofImages;
+  }, [paymentProofImages]);
+
+  useEffect(() => {
+    return () => {
+      paymentProofImagesRef.current.forEach(revokeObjectUrlIfNeeded);
+    };
+  }, []);
+
+  useEffect(() => {
+    const canPastePaymentProof =
+      role === "CEO" &&
+      isProofUploadEnabled();
+    if (!canPastePaymentProof) return undefined;
+
+    const onPaste = async (event) => {
+      const clipboardItems = Array.from(event?.clipboardData?.items || []);
+      const imageFiles = clipboardItems
+        .filter((item) => String(item?.type || "").startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter(Boolean);
+
+      if (!imageFiles.length) return;
+      event.preventDefault();
+      await appendProofFiles(imageFiles);
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [role, paymentVerificationStatus, paymentReceivedMethod, paymentProofImages.length]);
+
+  useEffect(() => {
+    if (isProofUploadEnabled()) return;
+    setDraggingProofs(false);
+    setPaymentProofError("");
+  }, [paymentVerificationStatus, paymentReceivedMethod]);
+
   if (role && !["CEO", "Manager", "Admin"].includes(role)) {
     return (
       <div className="page-container">
@@ -716,6 +1036,7 @@ const OrderDetail = () => {
   const orderTrackingLabel = orderIsLocalDelivery ? "N/A (Local Delivery)" : (order?.trackingId || order?.trackingNumber || "—");
   const canViewPaymentVerification = role === "CEO" || role === "Manager";
   const canEditPaymentVerification = role === "CEO";
+  const canShowProofUploader = isProofUploadEnabled();
   const paymentVerificationStatusLabel =
     String(order?.paymentVerification?.status || "").toLowerCase() === "verified" ||
     order?.paymentVerification?.isVerified === true
@@ -725,6 +1046,12 @@ const OrderDetail = () => {
     paymentVerificationStatusLabel === "Verified"
       ? "status-badge status-success"
       : "status-badge status-warn";
+  const paymentProofCount = Array.isArray(order?.paymentVerification?.proofImages)
+    ? order.paymentVerification.proofImages.length
+    : 0;
+  const paymentVerificationAuditLogs = Array.isArray(order?.paymentVerification?.auditLogs)
+    ? [...order.paymentVerification.auditLogs].reverse()
+    : [];
 
   // Wrap the entire render in a try-catch to prevent white screen
   try {
@@ -821,6 +1148,12 @@ const OrderDetail = () => {
             <div className="amount-item"><span className="label">Subtotal</span><span className="value">{order?.subTotal ?? 0}</span></div>
             <div className="amount-item"><span className="label">Shipping</span><span className="value">{order?.shippingCost ?? 0}</span></div>
             <div className="amount-item"><span className="label">Discount</span><span className="value">{order?.discount ?? 0}</span></div>
+            {order?.coupon?.couponCode || order?.couponCode ? (
+              <div className="amount-item"><span className="label">Coupon</span><span className="value">{order?.coupon?.couponCode || order?.couponCode}</span></div>
+            ) : null}
+            {order?.affiliate?.commissionAmount > 0 ? (
+              <div className="amount-item"><span className="label">Affiliate Commission</span><span className="value">{order.affiliate.commissionAmount}</span></div>
+            ) : null}
             <div className="amount-item total"><span className="label">Total</span><span className="value">{order?.totalAmount ?? 0}</span></div>
           </div>
         </div>
@@ -831,6 +1164,9 @@ const OrderDetail = () => {
             <li><span>User</span><strong>{order?.user?.name || order?.user?._id || order?.user || "—"}</strong></li>
             <li><span>Items</span><strong>{(order?.cart || []).length}</strong></li>
             <li><span>Status</span><strong className={statusClass}>{displayStatus}</strong></li>
+            {order?.affiliate?.commissionAmount > 0 && (
+              <li><span>Affiliate</span><strong>{order?.affiliate?.name || "Unassigned"}</strong></li>
+            )}
           </ul>
         </div>
       </div>
@@ -849,6 +1185,52 @@ const OrderDetail = () => {
             <div><label>Verified By</label><p>{order?.paymentVerification?.verifiedBy?.name || "—"}</p></div>
             <div><label>Verified At</label><p>{fmtDateTime(order?.paymentVerification?.verifiedAt)}</p></div>
             <div className="full"><label>Notes</label><p>{order?.paymentVerification?.notes || "—"}</p></div>
+            <div className="full">
+              <label>Verification Audit Log</label>
+              {paymentVerificationAuditLogs.length > 0 ? (
+                <div className="payment-audit-log">
+                  {paymentVerificationAuditLogs.map((entry, index) => (
+                    <div className="payment-audit-item" key={`audit-${index}-${entry?.changedAt || ""}`}>
+                      <div className="top">
+                        <strong>{String(entry?.action || "").toLowerCase() === "verified" ? "Marked Verified" : "Marked Unverified"}</strong>
+                        <span>{fmtDateTime(entry?.changedAt)}</span>
+                      </div>
+                      <div className="meta">
+                        <span>By: {entry?.changedBy?.name || "Unknown"}</span>
+                        <span>Method: {entry?.receivedMethod || "—"}</span>
+                        <span>Amount: {entry?.amountReceived ?? 0}</span>
+                        <span>Proofs: {entry?.proofImageCount ?? 0}</span>
+                      </div>
+                      {entry?.notes ? <p>{entry.notes}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p>—</p>
+              )}
+            </div>
+            {paymentProofCount > 0 && (
+              <div className="full">
+                <label>Payment Proof Images</label>
+                {paymentProofCount > 0 ? (
+                  <div className="proof-readonly-grid">
+                    {(order?.paymentVerification?.proofImages || []).map((proof, index) => (
+                      <button
+                        type="button"
+                        className="proof-readonly-item"
+                        key={`${proof?.publicId || proof?.url || "proof"}-${index}`}
+                        onClick={() => setPreviewProofUrl(String(proof?.url || ""))}
+                      >
+                        <img src={proof?.url} alt={proof?.originalName || `payment-proof-${index + 1}`} />
+                        <span>{fmtDateTime(proof?.uploadedAt)}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p>—</p>
+                )}
+              </div>
+            )}
           </div>
 
           {canEditPaymentVerification && (
@@ -905,6 +1287,115 @@ const OrderDetail = () => {
                 value={paymentVerificationNotes}
                 onChange={(e) => setPaymentVerificationNotes(e.target.value)}
               />
+              {canShowProofUploader && (
+                <>
+                  <div
+                    className={`payment-proof-dropzone ${draggingProofs ? "is-dragging" : ""} ${canShowProofUploader ? "" : "is-disabled"}`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (!canShowProofUploader) return;
+                      setDraggingProofs(true);
+                    }}
+                    onDragLeave={(event) => {
+                      event.preventDefault();
+                      setDraggingProofs(false);
+                    }}
+                    onDrop={handleProofDrop}
+                  >
+                    <input
+                      ref={paymentProofInputRef}
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                      multiple
+                      onChange={handleProofInputChange}
+                      hidden
+                      disabled={!canShowProofUploader || paymentSaving}
+                    />
+                    <p className="payment-proof-title">Payment Verification Screenshot</p>
+                    <p className="payment-proof-subtitle">
+                      Drag & drop, paste from clipboard (Ctrl + V), or upload from your device.
+                    </p>
+                    <div className="payment-proof-controls">
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={!canShowProofUploader || paymentSaving}
+                        onClick={() => paymentProofInputRef.current?.click()}
+                      >
+                        Choose Images
+                      </button>
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        disabled={paymentSaving || !paymentProofImages.some((item) => item.source === "new")}
+                        onClick={clearNewProofImages}
+                      >
+                        Clear New
+                      </button>
+                    </div>
+                    <p className="payment-proof-hint">
+                      Supported: JPG, JPEG, PNG, WEBP. Max size: 5MB each. Up to {MAX_PAYMENT_PROOF_IMAGES} images.
+                    </p>
+                  </div>
+
+                  {paymentProofError ? <p className="payment-proof-error">{paymentProofError}</p> : null}
+
+                  {paymentProofImages.length > 0 && (
+                    <div className="payment-proof-gallery">
+                      {paymentProofImages.map((proofItem, index) => (
+                        <div className="payment-proof-card" key={proofItem.id}>
+                          <button
+                            type="button"
+                            className="payment-proof-preview-btn"
+                            onClick={() => setPreviewProofUrl(proofItem.url)}
+                          >
+                            <img src={proofItem.url} alt={proofItem.originalName || `proof-${index + 1}`} />
+                          </button>
+                          <div className="payment-proof-meta">
+                            <span className="name">{proofItem.originalName || `Proof ${index + 1}`}</span>
+                            <span>{fmtFileSize(proofItem.size)}</span>
+                            <span>{fmtDateTime(proofItem.uploadedAt)}</span>
+                          </div>
+                          <div className="payment-proof-actions">
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              onClick={() => moveProofImage(index, -1)}
+                              disabled={index === 0 || paymentSaving}
+                            >
+                              ←
+                            </button>
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              onClick={() => moveProofImage(index, 1)}
+                              disabled={index === paymentProofImages.length - 1 || paymentSaving}
+                            >
+                              →
+                            </button>
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              onClick={() => removeProofImageById(proofItem.id)}
+                              disabled={paymentSaving}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              {paymentSaving && canShowProofUploader && (
+                <div className="upload-progress-wrap">
+                  <div className="upload-progress-bar">
+                    <span style={{ width: `${paymentUploadProgress || 10}%` }} />
+                  </div>
+                  <p>{paymentUploadProgress ? `Uploading ${paymentUploadProgress}%` : "Uploading..."}</p>
+                </div>
+              )}
               <div className="payment-form-actions">
                 <button
                   className="btn"
@@ -918,6 +1409,22 @@ const OrderDetail = () => {
           )}
         </div>
       )}
+
+      {previewProofUrl ? (
+        <div
+          className="proof-preview-modal"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPreviewProofUrl("")}
+        >
+          <div className="proof-preview-modal-body" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="proof-preview-close" onClick={() => setPreviewProofUrl("")}>
+              Close
+            </button>
+            <img src={previewProofUrl} alt="Payment proof preview" />
+          </div>
+        </div>
+      ) : null}
 
       <div className="card" style={{ marginTop: 16 }}>
         <div className="card-header"><h2>Items</h2></div>

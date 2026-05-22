@@ -35,6 +35,7 @@ const AccessoryList = () => {
   const [featureSavingIds, setFeatureSavingIds] = useState({});
   const [quickAddLoading, setQuickAddLoading] = useState(false);
   const [autoImportAttempted, setAutoImportAttempted] = useState(false);
+  const [initialFetchDone, setInitialFetchDone] = useState(false);
 
   const getAuthHeaders = useCallback(() => {
     try {
@@ -69,6 +70,7 @@ const AccessoryList = () => {
       setError(err?.message || "Failed to load accessories");
     } finally {
       setLoading(false);
+      setInitialFetchDone(true);
     }
   }, [getAuthHeaders]);
 
@@ -204,6 +206,7 @@ const AccessoryList = () => {
             children: "Lighting",
             quantity: 1,
             status: "in-stock",
+            preserveExistingPrice: true,
           }),
         });
         const rawText = await resp.text();
@@ -235,10 +238,10 @@ const AccessoryList = () => {
   );
 
   useEffect(() => {
-    if (loading || error || autoImportAttempted || accessories.length > 0) return;
+    if (!initialFetchDone || loading || error || autoImportAttempted || accessories.length > 0) return;
     setAutoImportAttempted(true);
     handleQuickAddHalfMoon({ silent: true });
-  }, [accessories.length, autoImportAttempted, error, handleQuickAddHalfMoon, loading]);
+  }, [accessories.length, autoImportAttempted, error, handleQuickAddHalfMoon, initialFetchDone, loading]);
 
   if (loading) {
     return (
@@ -266,7 +269,7 @@ const AccessoryList = () => {
             type="button"
             disabled={quickAddLoading}
           >
-            {quickAddLoading ? "Importing..." : "Auto Add Half Moon Light (15,999)"}
+            {quickAddLoading ? "Importing..." : "Sync Half Moon Light"}
           </button>
           <button className="btn" onClick={() => navigate("/admin/accessories/new")} type="button">
             + Add Accessory

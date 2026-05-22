@@ -51,6 +51,23 @@ const FRIENDLY_FIELD_LABELS = {
   "automation.searchIntent": "Search intent",
   "automation.targetLocation": "Target location",
   "automation.contentBrief": "Content brief",
+  shortDescription: "Short description",
+  fullDescription: "Full description",
+  eventDate: "Event date",
+  startTime: "Start time",
+  endTime: "End time",
+  venue: "Venue",
+  location: "Location",
+  organizerName: "Organizer name",
+  onlineMeetingLink: "Online meeting link",
+  registrationFields: "Registration fields",
+  registrationEnabled: "Registration status",
+  registrationDeadline: "Registration deadline",
+  seatsLimit: "Seats limit",
+  featured: "Featured status",
+  "contactInfo.phone": "Contact phone",
+  "contactInfo.email": "Contact email",
+  "contactInfo.whatsapp": "WhatsApp",
 };
 
 const toLabel = (path = "") => {
