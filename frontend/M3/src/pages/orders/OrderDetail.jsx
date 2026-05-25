@@ -30,6 +30,11 @@ const OrderDetail = () => {
   const [paymentUploadProgress, setPaymentUploadProgress] = useState(0);
   const [draggingProofs, setDraggingProofs] = useState(false);
   const [previewProofUrl, setPreviewProofUrl] = useState("");
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteSaving, setDeleteSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const paymentProofInputRef = useRef(null);
   const paymentProofImagesRef = useRef([]);
   const courierCompanies = ["DHL", "TCS", "FedEx", "Blue Dart", "Leopards", "PostEx", "Local"];
@@ -695,6 +700,58 @@ const OrderDetail = () => {
     }
   };
 
+  const openDeleteModal = () => {
+    setDeletePassword("");
+    setDeleteConfirmText("");
+    setDeleteError("");
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    if (deleteSaving) return;
+    setDeleteModalOpen(false);
+    setDeletePassword("");
+    setDeleteConfirmText("");
+    setDeleteError("");
+  };
+
+  const deleteOrder = async () => {
+    if (!id || role !== "CEO") return;
+
+    if (!deletePassword.trim()) {
+      setDeleteError("Enter your CEO password to continue.");
+      return;
+    }
+
+    if (deleteConfirmText.trim().toUpperCase() !== "DELETE") {
+      setDeleteError("Type DELETE to confirm permanent removal.");
+      return;
+    }
+
+    setDeleteSaving(true);
+    setDeleteError("");
+    try {
+      const resp = await fetch(`${API_BASE_URL}/order/admin/orders/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ password: deletePassword }),
+      });
+      const isJson = resp.headers.get("content-type")?.includes("application/json");
+      const data = isJson ? await resp.json().catch(() => ({})) : {};
+
+      if (!resp.ok) {
+        throw new Error(data?.message || data?.error || "Failed to delete order");
+      }
+
+      alert("Order deleted successfully.");
+      window.location.href = "/admin/orders";
+    } catch (err) {
+      setDeleteError(err.message || "Failed to delete order");
+    } finally {
+      setDeleteSaving(false);
+    }
+  };
+
   const openPrintSlip = async (format = "auto") => {
     if (!order) return;
     if (!["CEO", "Manager", "Admin"].includes(role)) {
@@ -1036,6 +1093,7 @@ const OrderDetail = () => {
   const orderTrackingLabel = orderIsLocalDelivery ? "N/A (Local Delivery)" : (order?.trackingId || order?.trackingNumber || "—");
   const canViewPaymentVerification = role === "CEO" || role === "Manager";
   const canEditPaymentVerification = role === "CEO";
+  const canDeleteOrder = role === "CEO";
   const canShowProofUploader = isProofUploadEnabled();
   const paymentVerificationStatusLabel =
     String(order?.paymentVerification?.status || "").toLowerCase() === "verified" ||
@@ -1112,6 +1170,11 @@ const OrderDetail = () => {
           <button className="btn" disabled={!canUpdate} onClick={updateStatus}>{saving ? "Saving..." : "Update"}</button>
           <button className="btn" onClick={() => openPrintSlip("a4")}>Print Slip</button>
           <button className="btn secondary" onClick={() => openPrintSlip("thermal")}>Thermal Slip</button>
+          {canDeleteOrder && (
+            <button className="btn danger" onClick={openDeleteModal} disabled={deleteSaving}>
+              Delete Order
+            </button>
+          )}
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/orders")}>← Back</button>
       </div>
       </div>
@@ -1422,6 +1485,68 @@ const OrderDetail = () => {
               Close
             </button>
             <img src={previewProofUrl} alt="Payment proof preview" />
+          </div>
+        </div>
+      ) : null}
+
+      {deleteModalOpen ? (
+        <div
+          className="order-delete-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="order-delete-title"
+          onClick={closeDeleteModal}
+        >
+          <div className="order-delete-modal-body" onClick={(event) => event.stopPropagation()}>
+            <div className="order-delete-modal-head">
+              <div>
+                <p className="order-delete-eyebrow">CEO Verification</p>
+                <h2 id="order-delete-title">Delete Order #{order?.invoice || id}</h2>
+              </div>
+              <button
+                type="button"
+                className="order-delete-close"
+                onClick={closeDeleteModal}
+                disabled={deleteSaving}
+                aria-label="Close delete confirmation"
+              >
+                ×
+              </button>
+            </div>
+            <p className="order-delete-copy">
+              This permanently removes the order from the database. Enter your CEO password and type DELETE to confirm.
+            </p>
+            <div className="order-delete-fields">
+              <label>
+                CEO Password
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(event) => setDeletePassword(event.target.value)}
+                  disabled={deleteSaving}
+                  autoComplete="current-password"
+                />
+              </label>
+              <label>
+                Confirmation
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(event) => setDeleteConfirmText(event.target.value)}
+                  disabled={deleteSaving}
+                  placeholder="Type DELETE"
+                />
+              </label>
+            </div>
+            {deleteError ? <p className="order-delete-error">{deleteError}</p> : null}
+            <div className="order-delete-actions">
+              <button type="button" className="btn secondary" onClick={closeDeleteModal} disabled={deleteSaving}>
+                Cancel
+              </button>
+              <button type="button" className="btn danger" onClick={deleteOrder} disabled={deleteSaving}>
+                {deleteSaving ? "Deleting..." : "Delete Permanently"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
