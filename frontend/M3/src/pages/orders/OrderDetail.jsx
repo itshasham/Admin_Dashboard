@@ -591,8 +591,8 @@ const OrderDetail = () => {
 
   const updatePaymentVerification = async () => {
     if (!id) return;
-    if (role !== "CEO") {
-      alert("Only CEO can update payment verification.");
+    if (!["CEO", "Manager"].includes(role)) {
+      alert("Only CEO or Manager can update payment verification.");
       return;
     }
 
@@ -989,7 +989,7 @@ const OrderDetail = () => {
 
   useEffect(() => {
     const canPastePaymentProof =
-      role === "CEO" &&
+      ["CEO", "Manager"].includes(role) &&
       isProofUploadEnabled();
     if (!canPastePaymentProof) return undefined;
 
@@ -1092,7 +1092,7 @@ const OrderDetail = () => {
   const orderIsLocalDelivery = isLocalDeliveryCourier(orderCourierName);
   const orderTrackingLabel = orderIsLocalDelivery ? "N/A (Local Delivery)" : (order?.trackingId || order?.trackingNumber || "—");
   const canViewPaymentVerification = role === "CEO" || role === "Manager";
-  const canEditPaymentVerification = role === "CEO";
+  const canEditPaymentVerification = role === "CEO" || role === "Manager";
   const canDeleteOrder = role === "CEO";
   const canShowProofUploader = isProofUploadEnabled();
   const paymentVerificationStatusLabel =
@@ -1110,6 +1110,31 @@ const OrderDetail = () => {
   const paymentVerificationAuditLogs = Array.isArray(order?.paymentVerification?.auditLogs)
     ? [...order.paymentVerification.auditLogs].reverse()
     : [];
+  const orderAuditLogs = Array.isArray(order?.auditLogs)
+    ? [...order.auditLogs].reverse()
+    : [];
+  const formatAuditValue = (value) => {
+    if (value === undefined || value === null || value === "") return "—";
+    if (typeof value === "boolean") return value ? "true" : "false";
+    if (typeof value === "object") {
+      if ("proofImageCount" in value) {
+        return [
+          `status: ${value.status || "pending"}`,
+          `amount: ${value.amountReceived ?? 0}`,
+          `method: ${value.receivedMethod || "—"}`,
+          `proofs: ${value.proofImageCount ?? 0}`,
+        ].join(", ");
+      }
+      return JSON.stringify(value);
+    }
+    return String(value);
+  };
+  const auditActionLabel = (action = "") => {
+    const normalized = String(action || "").trim();
+    if (normalized === "status_updated") return "Order Status Updated";
+    if (normalized === "payment_verification_updated") return "Payment Verification Updated";
+    return normalized.replace(/_/g, " ") || "Order Updated";
+  };
 
   // Wrap the entire render in a try-catch to prevent white screen
   try {
@@ -1234,6 +1259,42 @@ const OrderDetail = () => {
         </div>
       </div>
 
+      <div className="card order-audit-card" style={{ marginTop: 16 }}>
+        <div className="card-header"><h2>Order Change Trail</h2></div>
+        {orderAuditLogs.length > 0 ? (
+          <div className="order-audit-log">
+            {orderAuditLogs.map((entry, index) => (
+              <div className="order-audit-item" key={`order-audit-${index}-${entry?.changedAt || ""}`}>
+                <div className="top">
+                  <strong>{auditActionLabel(entry?.action)}</strong>
+                  <span>{fmtDateTime(entry?.changedAt)}</span>
+                </div>
+                <div className="meta">
+                  <span>By: {entry?.changedBy?.name || entry?.changedBy?.email || "Unknown"}</span>
+                  {entry?.changedBy?.email ? <span>Account: {entry.changedBy.email}</span> : null}
+                  {entry?.changedBy?.role ? <span>Role: {entry.changedBy.role}</span> : null}
+                </div>
+                {entry?.summary ? <p>{entry.summary}</p> : null}
+                {Array.isArray(entry?.fieldsChanged) && entry.fieldsChanged.length > 0 ? (
+                  <div className="order-audit-fields">
+                    {entry.fieldsChanged.map((change, changeIndex) => (
+                      <div className="order-audit-field" key={`${change?.field || "field"}-${changeIndex}`}>
+                        <span className="field-name">{change?.field || "field"}</span>
+                        <span className="field-value">{formatAuditValue(change?.previousValue)}</span>
+                        <span className="field-arrow">→</span>
+                        <span className="field-value">{formatAuditValue(change?.nextValue)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No order changes have been recorded yet.</p>
+        )}
+      </div>
+
       {canViewPaymentVerification && (
         <div className="card" style={{ marginTop: 16 }}>
           <div className="card-header"><h2>Payment Verification</h2></div>
@@ -1259,7 +1320,9 @@ const OrderDetail = () => {
                         <span>{fmtDateTime(entry?.changedAt)}</span>
                       </div>
                       <div className="meta">
-                        <span>By: {entry?.changedBy?.name || "Unknown"}</span>
+                        <span>By: {entry?.changedBy?.name || entry?.changedBy?.email || "Unknown"}</span>
+                        {entry?.changedBy?.email ? <span>Account: {entry.changedBy.email}</span> : null}
+                        {entry?.changedBy?.role ? <span>Role: {entry.changedBy.role}</span> : null}
                         <span>Method: {entry?.receivedMethod || "—"}</span>
                         <span>Amount: {entry?.amountReceived ?? 0}</span>
                         <span>Proofs: {entry?.proofImageCount ?? 0}</span>
