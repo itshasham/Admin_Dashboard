@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 import "./order.css";
 import { API_BASE_URL } from "../../config/api";
 
@@ -19,6 +20,7 @@ const OrderList = () => {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleteSaving, setDeleteSaving] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const deletePasswordRef = useRef(null);
 
   const getAuthHeaders = () => {
     try {
@@ -170,6 +172,31 @@ const OrderList = () => {
     }
     fetchOrders();
   }, []);
+
+  useEffect(() => {
+    if (!deleteTarget) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusTimer = window.setTimeout(() => {
+      deletePasswordRef.current?.focus();
+    }, 30);
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && !deleteSaving) {
+        closeDeleteModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [deleteTarget, deleteSaving]);
 
   const canViewPaymentVerification = role === "CEO" || role === "Manager";
   const canDeleteOrder = role === "CEO";
@@ -330,6 +357,77 @@ const OrderList = () => {
       setDeleteSaving(false);
     }
   };
+
+  const deleteModal =
+    deleteTarget && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="order-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="order-delete-title"
+            onClick={closeDeleteModal}
+          >
+            <div className="order-delete-modal-body" onClick={(event) => event.stopPropagation()}>
+              <div className="order-delete-modal-head">
+                <div>
+                  <p className="order-delete-eyebrow">CEO Verification</p>
+                  <h2 id="order-delete-title">Delete Order #{deleteTarget?.invoice || deleteTarget?._id}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="order-delete-close"
+                  onClick={closeDeleteModal}
+                  disabled={deleteSaving}
+                  aria-label="Close delete confirmation"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="order-delete-copy">
+                This permanently removes the order from the database. Enter your CEO password and type DELETE to confirm.
+              </p>
+              <div className="order-delete-alert">
+                <strong>Why you are seeing this</strong>
+                <span>Order deletion is protected. It will not delete instantly after one click.</span>
+              </div>
+              <div className="order-delete-fields">
+                <label>
+                  CEO Password
+                  <input
+                    ref={deletePasswordRef}
+                    type="password"
+                    value={deletePassword}
+                    onChange={(event) => setDeletePassword(event.target.value)}
+                    disabled={deleteSaving}
+                    autoComplete="current-password"
+                  />
+                </label>
+                <label>
+                  Confirmation
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(event) => setDeleteConfirmText(event.target.value)}
+                    disabled={deleteSaving}
+                    placeholder="Type DELETE"
+                  />
+                </label>
+              </div>
+              {deleteError ? <p className="order-delete-error">{deleteError}</p> : null}
+              <div className="order-delete-actions">
+                <button type="button" className="btn secondary" onClick={closeDeleteModal} disabled={deleteSaving}>
+                  Cancel
+                </button>
+                <button type="button" className="btn danger" onClick={deleteOrder} disabled={deleteSaving}>
+                  {deleteSaving ? "Deleting..." : "Delete Permanently"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
     <div className="page-container orders-page">
@@ -525,67 +623,7 @@ const OrderList = () => {
         )}
       </div>
 
-      {deleteTarget ? (
-        <div
-          className="order-delete-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="order-delete-title"
-          onClick={closeDeleteModal}
-        >
-          <div className="order-delete-modal-body" onClick={(event) => event.stopPropagation()}>
-            <div className="order-delete-modal-head">
-              <div>
-                <p className="order-delete-eyebrow">CEO Verification</p>
-                <h2 id="order-delete-title">Delete Order #{deleteTarget?.invoice || deleteTarget?._id}</h2>
-              </div>
-              <button
-                type="button"
-                className="order-delete-close"
-                onClick={closeDeleteModal}
-                disabled={deleteSaving}
-                aria-label="Close delete confirmation"
-              >
-                ×
-              </button>
-            </div>
-            <p className="order-delete-copy">
-              This permanently removes the order from the database. Enter your CEO password and type DELETE to confirm.
-            </p>
-            <div className="order-delete-fields">
-              <label>
-                CEO Password
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(event) => setDeletePassword(event.target.value)}
-                  disabled={deleteSaving}
-                  autoComplete="current-password"
-                />
-              </label>
-              <label>
-                Confirmation
-                <input
-                  type="text"
-                  value={deleteConfirmText}
-                  onChange={(event) => setDeleteConfirmText(event.target.value)}
-                  disabled={deleteSaving}
-                  placeholder="Type DELETE"
-                />
-              </label>
-            </div>
-            {deleteError ? <p className="order-delete-error">{deleteError}</p> : null}
-            <div className="order-delete-actions">
-              <button type="button" className="btn secondary" onClick={closeDeleteModal} disabled={deleteSaving}>
-                Cancel
-              </button>
-              <button type="button" className="btn danger" onClick={deleteOrder} disabled={deleteSaving}>
-                {deleteSaving ? "Deleting..." : "Delete Permanently"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {deleteModal}
     </div>
   );
 };
