@@ -769,12 +769,69 @@ const OrderDetail = () => {
 
     const safe = (v) => String(v ?? "").trim();
     const fmtDate = (d) => { try { return d ? new Date(d).toLocaleString() : ""; } catch { return safe(d); } };
+    const toAmount = (value) => {
+      const amount = Number(value);
+      return Number.isFinite(amount) ? amount : 0;
+    };
+    const fmtAmount = (value) =>
+      new Intl.NumberFormat("en-PK", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(toAmount(value));
 
     const orderId = safe(order?._id || id);
     const items = Array.isArray(order?.cart) ? order.cart : [];
     const expectedDelivery =
       order?.expectedDeliveryDate || order?.expectedDelivery || order?.deliveryDate || "";
     const notes = order?.deliveryNotes || order?.orderNote || "";
+    const shippingAmount = toAmount(order?.shippingCost);
+    const paymentFeeAmount = toAmount(order?.paymentFee);
+    const discountAmount = toAmount(order?.discount);
+    const totalAmount = toAmount(order?.totalAmount);
+    const inferredItemSubtotal = items.reduce((sum, item) => {
+      const qty = toAmount(item?.orderQuantity ?? item?.quantity ?? item?.qty ?? 1) || 1;
+      const explicitSubtotal = toAmount(item?.subTotal ?? item?.subtotal ?? item?.lineSubtotal);
+      if (explicitSubtotal > 0) return sum + explicitSubtotal;
+
+      const unitPrice = toAmount(
+        item?.price ??
+        item?.originalPrice ??
+        item?.itemPrice ??
+        item?.unitPrice ??
+        item?.product?.price ??
+        item?.productId?.price
+      );
+
+      return unitPrice > 0 ? sum + unitPrice * qty : sum;
+    }, 0);
+    const resolvedSubtotal =
+      toAmount(order?.subTotal ?? order?.subtotal) ||
+      Math.max(0, totalAmount - shippingAmount - paymentFeeAmount + discountAmount) ||
+      inferredItemSubtotal;
+    const amountRowsHtml = [
+      { label: "Original Price", value: `PKR ${fmtAmount(resolvedSubtotal)}` },
+      {
+        label: "Discount",
+        value: discountAmount > 0 ? `- PKR ${fmtAmount(discountAmount)}` : "PKR 0",
+      },
+      {
+        label: "Delivery Charges",
+        value: shippingAmount > 0 ? `PKR ${fmtAmount(shippingAmount)}` : "Free",
+      },
+      ...(paymentFeeAmount > 0
+        ? [{ label: "COD Fee", value: `PKR ${fmtAmount(paymentFeeAmount)}` }]
+        : []),
+      { label: "Payable Total", value: `PKR ${fmtAmount(totalAmount)}`, big: true },
+    ]
+      .map(
+        (row) => `
+          <div class="row">
+            <div class="k">${escapeHtml(row.label)}</div>
+            <div class="v${row.big ? " big" : ""}">${escapeHtml(row.value)}</div>
+          </div>
+        `
+      )
+      .join("");
 
     const rowsHtml = items
       .map((it, idx) => {
@@ -904,7 +961,7 @@ const OrderDetail = () => {
                 </table>
 
                 <div class="totals">
-                  <div class="row"><div class="k">Total Amount</div><div class="v big">${escapeHtml(order?.totalAmount ?? "")}</div></div>
+                  ${amountRowsHtml}
                 </div>
               </div>
 
@@ -1235,6 +1292,9 @@ const OrderDetail = () => {
           <div className="amounts">
             <div className="amount-item"><span className="label">Subtotal</span><span className="value">{order?.subTotal ?? 0}</span></div>
             <div className="amount-item"><span className="label">Shipping</span><span className="value">{order?.shippingCost ?? 0}</span></div>
+            {Number(order?.paymentFee || 0) > 0 ? (
+              <div className="amount-item"><span className="label">COD Fee</span><span className="value">{order.paymentFee}</span></div>
+            ) : null}
             <div className="amount-item"><span className="label">Discount</span><span className="value">{order?.discount ?? 0}</span></div>
             {order?.coupon?.couponCode || order?.couponCode ? (
               <div className="amount-item"><span className="label">Coupon</span><span className="value">{order?.coupon?.couponCode || order?.couponCode}</span></div>
