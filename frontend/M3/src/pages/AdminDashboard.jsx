@@ -581,6 +581,7 @@ const AdminDashboard = () => {
     { label: "Blog CMS", hint: "SEO Content", path: "/admin/blogs", show: true },
     { label: "Orders", hint: "Fulfillment", path: "/admin/orders", show: true },
     { label: "Contact Us", hint: "Leads", path: "/admin/contact-us", show: canAccessRestrictedSections() },
+    { label: "Map Links", hint: "PIN Vault", path: "/admin/google-map-links", show: canAccessRestrictedSections() },
     { label: "Brands", hint: "Portfolio", path: "/admin/brands", show: true },
     { label: "Categories", hint: "Structure", path: "/admin/categories", show: canAccessRestrictedSections() },
     { label: "Coupons", hint: "Promotions", path: "/admin/coupons", show: canAccessRestrictedSections() },

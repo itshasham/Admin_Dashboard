@@ -41,6 +41,7 @@ const CouponForm = lazy(() => import("./pages/coupons/CouponForm"));
 
 const CloudinaryPage = lazy(() => import("./pages/cloudinary/CloudinaryPage"));
 const ContactUsList = lazy(() => import("./pages/contacts/ContactUsList"));
+const GoogleMapLinkList = lazy(() => import("./pages/google-map-links/GoogleMapLinkList"));
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -162,6 +163,10 @@ const App = () => {
           <Route
             path="/admin/contact-us"
             element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><ContactUsList /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/google-map-links"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><GoogleMapLinkList /></ProtectedRoute>}
           />
           
           {/* Redirect route for email links */}
