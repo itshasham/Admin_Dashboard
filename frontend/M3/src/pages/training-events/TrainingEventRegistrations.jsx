@@ -52,6 +52,12 @@ const exportColumnOptions = [
   { key: "approved_by", label: "Approved By" },
   { key: "notes_comments", label: "Notes/Comments" },
 ];
+const EXPORT_TIMEOUT_MS = 120000;
+const exportContentTypes = {
+  csv: "text/csv",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pdf: "application/pdf",
+};
 
 const PMDC_SEARCH_ENDPOINT = "https://hospitals-inspections.pmdc.pk/api/DRC/GetData";
 const PMDC_QUALIFICATIONS_ENDPOINT =
@@ -237,6 +243,26 @@ const toDateLabel = (value) => {
   } catch {
     return String(value);
   }
+};
+
+const getFilenameFromContentDisposition = (headerValue, fallback) => {
+  const value = String(headerValue || "");
+  const encodedMatch = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (encodedMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedMatch[1]).replace(/[\\/:*?"<>|]+/g, "-");
+    } catch {
+      return encodedMatch[1].replace(/[\\/:*?"<>|]+/g, "-");
+    }
+  }
+  const plainMatch = value.match(/filename="?([^";]+)"?/i);
+  return plainMatch?.[1] ? plainMatch[1].replace(/[\\/:*?"<>|]+/g, "-") : fallback;
+};
+
+const isExpectedExportResponse = (resp, format) => {
+  const contentType = String(resp.headers.get("content-type") || "").toLowerCase();
+  const expected = exportContentTypes[format];
+  return Boolean(expected && contentType.includes(expected));
 };
 
 const normalizePmdcStatusValue = (value) => {
@@ -1047,6 +1073,8 @@ const TrainingEventRegistrations = () => {
       return;
     }
     setExportLoading(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), EXPORT_TIMEOUT_MS);
     try {
       const url = new URL(
         `${API_BASE_URL}/training-events/admin/registrations/export/${exportFormat}`
@@ -1086,26 +1114,50 @@ const TrainingEventRegistrations = () => {
 
       const resp = await fetch(url.toString(), {
         headers: { ...getAuthHeaders() },
+        cache: "no-store",
+        signal: controller.signal,
       });
       if (!resp.ok) {
         const payload = await resp.json().catch(() => ({}));
         const parsed = parseApiError(payload, "Failed to export registrations");
         throw new Error(parsed.issues.join(" ") || parsed.summary);
       }
+      if (!isExpectedExportResponse(resp, exportFormat)) {
+        const payload = await resp.json().catch(() => ({}));
+        const parsed = parseApiError(
+          payload,
+          "The server did not return a valid export file. Please refresh and try again."
+        );
+        throw new Error(parsed.issues.join(" ") || parsed.summary);
+      }
       const blob = await resp.blob();
+      if (!blob.size) {
+        throw new Error("The export file was empty. Please adjust filters and try again.");
+      }
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
+      const fallbackFilename = `training-event-registrations.${exportFormat}`;
       link.href = objectUrl;
-      link.download = `training-event-registrations.${exportFormat}`;
+      link.download = getFilenameFromContentDisposition(
+        resp.headers.get("content-disposition"),
+        fallbackFilename
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(objectUrl);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
       setShowExportModal(false);
       alert("Export completed successfully.");
     } catch (err) {
-      alert(err?.message || "Failed to export registrations");
+      if (err?.name === "AbortError") {
+        alert(
+          "Export took too long and was cancelled safely. Try CSV, fewer columns, or a narrower date/event filter."
+        );
+      } else {
+        alert(err?.message || "Failed to export registrations");
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       setExportLoading(false);
     }
   };
