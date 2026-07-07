@@ -53,12 +53,6 @@ const exportColumnOptions = [
   { key: "notes_comments", label: "Notes/Comments" },
 ];
 const EXPORT_TIMEOUT_MS = 120000;
-const exportContentTypes = {
-  csv: "text/csv",
-  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  pdf: "application/pdf",
-};
-
 const PMDC_SEARCH_ENDPOINT = "https://hospitals-inspections.pmdc.pk/api/DRC/GetData";
 const PMDC_QUALIFICATIONS_ENDPOINT =
   "https://hospitals-inspections.pmdc.pk/api/DRC/GetQualifications";
@@ -259,10 +253,9 @@ const getFilenameFromContentDisposition = (headerValue, fallback) => {
   return plainMatch?.[1] ? plainMatch[1].replace(/[\\/:*?"<>|]+/g, "-") : fallback;
 };
 
-const isExpectedExportResponse = (resp, format) => {
+const isErrorLikeExportResponse = (resp) => {
   const contentType = String(resp.headers.get("content-type") || "").toLowerCase();
-  const expected = exportContentTypes[format];
-  return Boolean(expected && contentType.includes(expected));
+  return contentType.includes("application/json") || contentType.includes("text/html");
 };
 
 const normalizePmdcStatusValue = (value) => {
@@ -1063,12 +1056,18 @@ const TrainingEventRegistrations = () => {
     });
   };
 
-  const executeExport = async () => {
-    if (!exportColumns.length) {
+  const executeExport = async (overrides = {}) => {
+    const nextFormat = overrides.format || exportFormat;
+    const nextScope = overrides.scope || exportScope;
+    const nextColumns = Array.isArray(overrides.columns) && overrides.columns.length
+      ? overrides.columns
+      : exportColumns;
+
+    if (!nextColumns.length) {
       alert("Select at least one column for export.");
       return;
     }
-    if (exportScope === "selected" && selectedIds.length === 0) {
+    if (nextScope === "selected" && selectedIds.length === 0) {
       alert("Select at least one registration row first.");
       return;
     }
@@ -1077,13 +1076,13 @@ const TrainingEventRegistrations = () => {
     const timeoutId = window.setTimeout(() => controller.abort(), EXPORT_TIMEOUT_MS);
     try {
       const url = new URL(
-        `${API_BASE_URL}/training-events/admin/registrations/export/${exportFormat}`
+        `${API_BASE_URL}/training-events/admin/registrations/export/${nextFormat}`
       );
-      if (exportScope !== "selected") {
+      if (nextScope !== "selected") {
         if (isEventScoped && id) {
           url.searchParams.set("eventId", id);
         }
-        if (exportScope === "filtered") {
+        if (nextScope === "filtered") {
           if (!isEventScoped && eventFilter) {
             url.searchParams.set("eventId", eventFilter);
           }
@@ -1107,10 +1106,10 @@ const TrainingEventRegistrations = () => {
           }
         }
       }
-      if (exportScope === "selected") {
+      if (nextScope === "selected") {
         url.searchParams.set("ids", selectedIds.join(","));
       }
-      url.searchParams.set("columns", exportColumns.join(","));
+      url.searchParams.set("columns", nextColumns.join(","));
 
       const resp = await fetch(url.toString(), {
         headers: { ...getAuthHeaders() },
@@ -1122,11 +1121,11 @@ const TrainingEventRegistrations = () => {
         const parsed = parseApiError(payload, "Failed to export registrations");
         throw new Error(parsed.issues.join(" ") || parsed.summary);
       }
-      if (!isExpectedExportResponse(resp, exportFormat)) {
+      if (isErrorLikeExportResponse(resp)) {
         const payload = await resp.json().catch(() => ({}));
         const parsed = parseApiError(
           payload,
-          "The server did not return a valid export file. Please refresh and try again."
+          "The server returned an export error. Please refresh and try again."
         );
         throw new Error(parsed.issues.join(" ") || parsed.summary);
       }
@@ -1136,7 +1135,7 @@ const TrainingEventRegistrations = () => {
       }
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const fallbackFilename = `training-event-registrations.${exportFormat}`;
+      const fallbackFilename = `training-event-registrations.${nextFormat}`;
       link.href = objectUrl;
       link.download = getFilenameFromContentDisposition(
         resp.headers.get("content-disposition"),
@@ -1146,7 +1145,7 @@ const TrainingEventRegistrations = () => {
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
-      setShowExportModal(false);
+      if (showExportModal) setShowExportModal(false);
       alert("Export completed successfully.");
     } catch (err) {
       if (err?.name === "AbortError") {
@@ -1196,8 +1195,13 @@ const TrainingEventRegistrations = () => {
               ? `Verifying ${bulkVerifyProgress}`
               : `Verify Selected PMDC (${selectedVerifiableRows.length})`}
           </button>
-          <button className="btn" type="button" onClick={() => setShowExportModal(true)}>
-            Export Registrations
+          <button
+            className="btn"
+            type="button"
+            onClick={() => executeExport({ format: "xlsx", scope: "filtered" })}
+            disabled={exportLoading}
+          >
+            {exportLoading ? "Exporting..." : "Export Registrations"}
           </button>
         </div>
       </div>
@@ -1349,8 +1353,13 @@ const TrainingEventRegistrations = () => {
           >
             Reset Filters
           </button>
-          <button className="btn secondary" type="button" onClick={() => setShowExportModal(true)}>
-            Export
+          <button
+            className="btn secondary"
+            type="button"
+            onClick={() => executeExport({ format: "xlsx", scope: "filtered" })}
+            disabled={exportLoading}
+          >
+            {exportLoading ? "Exporting..." : "Export"}
           </button>
           <button
             className="btn"
@@ -1676,7 +1685,7 @@ const TrainingEventRegistrations = () => {
                 Active filters will be included: status, PMDC status, event, event city, date
                 range, and search.
               </span>
-              <button className="btn" type="button" onClick={executeExport} disabled={exportLoading}>
+              <button className="btn" type="button" onClick={() => executeExport()} disabled={exportLoading}>
                 {exportLoading ? "Processing..." : "Download Export"}
               </button>
             </div>
