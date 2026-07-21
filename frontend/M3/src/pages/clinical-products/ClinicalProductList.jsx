@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import "../products/product.css";
 import { API_BASE_URL } from "../../config/api";
 
@@ -105,7 +105,8 @@ const ClinicalProductList = () => {
       {error && <div className="error">{error}</div>}
 
       {!loading && !error && (
-        <table className="table">
+        <div className="table-responsive">
+          <table className="table">
           <thead>
             <tr>
               <th>Image</th>
@@ -153,7 +154,8 @@ const ClinicalProductList = () => {
               </tr>
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       )}
     </div>
   );

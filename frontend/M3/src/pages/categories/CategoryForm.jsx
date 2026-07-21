@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import "./category.css";
 import { API_BASE_URL } from '../../config/api';
 
@@ -14,6 +14,7 @@ const emptyCategory = {
 
 const CategoryForm = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const isEdit = Boolean(id);
   const [category, setCategory] = useState(emptyCategory);
   const [saving, setSaving] = useState(false);
@@ -77,7 +78,7 @@ const CategoryForm = () => {
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(data?.message || "Save failed");
-      window.location.href = "/admin/categories";
+      navigate("/admin/categories");
     } catch (err) {
       setError(err.message || "Save failed");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -94,7 +95,7 @@ const CategoryForm = () => {
           <p className="muted">Well-structured categories help customers browse faster</p>
         </div>
         <div className="actions">
-          <button className="btn secondary" type="button" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
+          <button className="btn secondary" type="button" onClick={() => navigate("/admin/dashboard")}>← Back</button>
         </div>
       </div>
       {error && <div className="error">{error}</div>}
@@ -159,7 +160,7 @@ const CategoryForm = () => {
 
           <div className="actions">
             <button className="btn" type="submit" disabled={saving}>{saving ? "Saving..." : isEdit ? "Update Category" : "Create Category"}</button>
-            <button className="btn secondary" type="button" onClick={() => (window.location.href = "/admin/categories")}>Cancel</button>
+            <button className="btn secondary" type="button" onClick={() => navigate("/admin/categories")}>Cancel</button>
           </div>
         </form>
       </div>

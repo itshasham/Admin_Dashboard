@@ -1,5 +1,6 @@
-import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
+import { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { BookOpenText, LayoutDashboard, LogOut, Package, ShoppingBag, Stethoscope } from "lucide-react";
 
 // Lazy-loaded pages to reduce initial bundle
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
@@ -72,10 +73,102 @@ const AdminTitleManager = () => {
   return null;
 };
 
+const AdminGlobalNavigation = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const path = location.pathname;
+  const isAuthRoute = [
+    "/admin/login",
+    "/admin/register",
+    "/admin/forgot-password",
+    "/admin/reset-password",
+  ].some((route) => path === route || path.startsWith(`${route}/`));
+
+  if (!path.startsWith("/admin") || isAuthRoute || path === "/admin/dashboard") return null;
+
+  let adminName = "Administrator";
+  let adminRole = "Admin";
+  try {
+    const raw = localStorage.getItem("adminData");
+    const data = raw ? JSON.parse(raw) : null;
+    adminName = data?.name || adminName;
+    adminRole = data?.role || adminRole;
+  } catch {
+    // Keep a safe fallback when browser storage is unavailable.
+  }
+
+  const links = [
+    { label: "Overview", path: "/admin/dashboard", icon: LayoutDashboard },
+    { label: "Orders", path: "/admin/orders", icon: ShoppingBag },
+    { label: "Retail", path: "/admin/products", icon: Package },
+    { label: "Clinical", path: "/admin/clinical-products", icon: Stethoscope },
+    { label: "Content", path: "/admin/blogs", icon: BookOpenText },
+  ];
+
+  const logout = () => {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminData");
+    navigate("/admin/login", { replace: true });
+  };
+
+  return (
+    <>
+      <header className="admin-page-nav">
+        <button type="button" className="admin-page-nav-brand" onClick={() => navigate("/admin/dashboard")}>
+          <span className="admin-page-nav-mark">N</span>
+          <span>
+            <strong>NEES Medical</strong>
+            <small>Admin workspace</small>
+          </span>
+        </button>
+        <nav className="admin-page-nav-links" aria-label="Admin shortcuts">
+          {links.map(({ label, path: target, icon: Icon }) => {
+            const active = path === target || (target !== "/admin/dashboard" && path.startsWith(`${target}/`));
+            return (
+              <button
+                key={target}
+                type="button"
+                className={active ? "active" : ""}
+                aria-current={active ? "page" : undefined}
+                onClick={() => navigate(target)}
+              >
+                <Icon size={16} aria-hidden="true" />
+                {label}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="admin-page-nav-account">
+          <span><strong>{adminName}</strong><small>{adminRole}</small></span>
+          <button type="button" onClick={logout} aria-label="Log out"><LogOut size={16} /></button>
+        </div>
+      </header>
+      <nav className="admin-page-mobile-dock" aria-label="Mobile admin shortcuts">
+        {links.slice(0, 4).map(({ label, path: target, icon: Icon }) => {
+          const active = path === target || (target !== "/admin/dashboard" && path.startsWith(`${target}/`));
+          return (
+            <button
+              key={target}
+              type="button"
+              className={active ? "active" : ""}
+              aria-current={active ? "page" : undefined}
+              onClick={() => navigate(target)}
+            >
+              <Icon size={18} aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </>
+  );
+};
+
 const App = () => {
   return (
     <BrowserRouter>
       <AdminTitleManager />
+      <AdminGlobalNavigation />
       <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
         <Routes>
           {/* Root: decide where to go based on auth */}

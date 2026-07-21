@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "../products/product.css";
 import { API_BASE_URL } from "../../config/api";
 
@@ -142,7 +142,8 @@ const ContactUsList = () => {
       {error && <div className="error">{error}</div>}
 
       {!loading && !error && (
-        <table className="table">
+        <div className="table-responsive">
+          <table className="table">
           <thead>
             <tr>
               <th>Date</th>
@@ -189,7 +190,8 @@ const ContactUsList = () => {
               </tr>
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       )}
     </div>
   );

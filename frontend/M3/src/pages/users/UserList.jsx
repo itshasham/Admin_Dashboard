@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import "./user.css";
 import { API_BASE_URL } from '../../config/api';
 
@@ -107,7 +107,8 @@ const UserList = () => {
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
         </div>
       </div>
-      <table className="table">
+      <div className="table-responsive">
+        <table className="table">
         <thead>
           <tr>
             <th>Name</th>
@@ -134,7 +135,8 @@ const UserList = () => {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 };

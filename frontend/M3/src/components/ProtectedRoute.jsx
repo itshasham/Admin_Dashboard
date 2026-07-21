@@ -1,4 +1,4 @@
-import React from "react";
+/* eslint-disable react/prop-types */
 import { Navigate, useLocation } from "react-router-dom";
 
 const ProtectedRoute = ({ children, allowedRoles = null }) => {
@@ -28,7 +28,16 @@ const ProtectedRoute = ({ children, allowedRoles = null }) => {
     }
   }
 
-  return children;
+  if (location.pathname === "/admin/dashboard") {
+    return children;
+  }
+
+  return (
+    <>
+      <a href="#admin-page-main" className="admin-skip-link">Skip to main content</a>
+      <main id="admin-page-main">{children}</main>
+    </>
+  );
 };
 
 export default ProtectedRoute;
