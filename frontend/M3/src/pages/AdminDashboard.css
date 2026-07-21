@@ -1477,3 +1477,80 @@ body {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.75); }
 }
+
+/* Keep the long dashboard chrome anchored while the workspace scrolls. */
+@media (min-width: 861px) {
+  .console-layout,
+  .console-layout.sidebar-collapsed {
+    display: block;
+    min-height: 100vh;
+  }
+
+  .console-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 264px;
+    min-height: 100dvh;
+    height: 100dvh;
+  }
+
+  .console-layout.sidebar-collapsed .console-sidebar {
+    width: 84px;
+  }
+
+  .console-workspace,
+  .console-layout.sidebar-collapsed .console-workspace {
+    min-height: 100vh;
+    margin-left: 264px;
+    padding-top: 4.7rem;
+  }
+
+  .console-layout.sidebar-collapsed .console-workspace {
+    margin-left: 84px;
+  }
+
+  .console-topbar,
+  .console-layout.sidebar-collapsed .console-topbar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 264px;
+    z-index: 50;
+  }
+
+  .console-layout.sidebar-collapsed .console-topbar {
+    left: 84px;
+  }
+}
+
+@media (max-width: 860px) {
+  .console-layout,
+  .console-layout.sidebar-collapsed {
+    display: block;
+    min-height: 100vh;
+  }
+
+  .console-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(86vw, 302px);
+    min-height: 100dvh;
+    height: 100dvh;
+  }
+
+  .console-workspace,
+  .console-layout.sidebar-collapsed .console-workspace {
+    min-height: 100vh;
+    margin-left: 0;
+    padding-top: 4.25rem;
+  }
+
+  .console-topbar,
+  .console-layout.sidebar-collapsed .console-topbar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 50;
+  }
+}

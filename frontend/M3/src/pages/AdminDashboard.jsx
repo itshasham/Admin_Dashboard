@@ -111,6 +111,15 @@ const getOrderAmount = (order) => {
   return fallbackAmount > 0 ? fallbackAmount : 0;
 };
 
+const normalizeCategoryLabel = (value) => {
+  const normalized = String(value || "Other")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!normalized) return "Other";
+  return normalized.replace(/\b[a-z]/g, (character) => character.toUpperCase());
+};
+
 const EmptyChart = ({ icon: Icon, title, description }) => (
   <div className="chart-empty" role="status" aria-live="polite">
     <span className="empty-icon" aria-hidden="true"><Icon size={21} /></span>
@@ -605,14 +614,13 @@ const AdminDashboard = () => {
 
           const cartItems = Array.isArray(order?.cart) ? order.cart : [];
           cartItems.forEach((item) => {
-            const name =
-              String(
-                item?.productType ||
-                item?.category?.name ||
-                item?.category ||
-                item?.parent ||
-                "Other"
-              ).trim() || "Other";
+            const name = normalizeCategoryLabel(
+              item?.productType ||
+              item?.category?.name ||
+              item?.category ||
+              item?.parent ||
+              "Other"
+            );
             const qty = toAmount(item?.orderQuantity ?? item?.quantity ?? 1) || 1;
             categoryMap.set(name, (categoryMap.get(name) || 0) + qty);
           });
