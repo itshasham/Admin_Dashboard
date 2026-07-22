@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
-import { BookOpenText, LayoutDashboard, LogOut, Package, ShoppingBag, Stethoscope } from "lucide-react";
+import { BookOpenText, LayoutDashboard, LogOut, MessageCircle, Package, ShoppingBag, Stethoscope } from "lucide-react";
 
 // Lazy-loaded pages to reduce initial bundle
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
@@ -36,6 +36,7 @@ const OrderList = lazy(() => import("./pages/orders/OrderList"));
 const OrderDetail = lazy(() => import("./pages/orders/OrderDetail"));
 
 const UserList = lazy(() => import("./pages/users/UserList"));
+const WhatsAppCampaign = lazy(() => import("./pages/whatsapp/WhatsAppCampaign"));
 
 const CouponList = lazy(() => import("./pages/coupons/CouponList"));
 const CouponForm = lazy(() => import("./pages/coupons/CouponForm"));
@@ -103,6 +104,7 @@ const AdminGlobalNavigation = () => {
     { label: "Retail", path: "/admin/products", icon: Package },
     { label: "Clinical", path: "/admin/clinical-products", icon: Stethoscope },
     { label: "Content", path: "/admin/blogs", icon: BookOpenText },
+    { label: "WhatsApp", path: "/admin/whatsapp", icon: MessageCircle },
   ];
 
   const logout = () => {
@@ -144,7 +146,7 @@ const AdminGlobalNavigation = () => {
         </div>
       </header>
       <nav className="admin-page-mobile-dock" aria-label="Mobile admin shortcuts">
-        {links.slice(0, 4).map(({ label, path: target, icon: Icon }) => {
+        {links.slice(0, 5).map(({ label, path: target, icon: Icon }) => {
           const active = path === target || (target !== "/admin/dashboard" && path.startsWith(`${target}/`));
           return (
             <button
@@ -236,6 +238,10 @@ const App = () => {
 
           {/* User Management (protected) */}
           <Route path="/admin/users" element={<ProtectedRoute><UserList /></ProtectedRoute>} />
+          <Route
+            path="/admin/whatsapp"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><WhatsAppCampaign /></ProtectedRoute>}
+          />
 
           {/* Coupon Management (protected) */}
           <Route

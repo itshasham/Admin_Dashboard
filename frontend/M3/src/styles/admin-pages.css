@@ -940,7 +940,7 @@ body .admin-staff .staff-form {
     left: 0.65rem;
     z-index: 110;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.22rem;
     padding: 0.28rem;
     border: 1px solid #c4ddd7;
