@@ -53,16 +53,19 @@ Internal role behavior:
 Endpoint behavior:
 
 - Uses helper `tryFetch(path)` with `API_BASE_URL + path`.
-- Tries `GET /admin/customers`.
-- Falls back to `GET /admin/users`.
-- `pickArray` accepts response shapes like `data`, `users`, `data.users`, `customers`, and `data.customers`.
+- Tries `GET /admin/customers?page=1&limit=200` and `GET /admin/users?page=1&limit=200`.
+- If both profile endpoints are unavailable or empty, falls back to order and contact data.
+- Normalizes and groups rows by trimmed, lowercased email address.
+- Provides search, deduplicated summary metrics, and CSV export.
 
 Important state:
 
 - `users`
 - `loading`
 - `error`
+- `notice`
 - `role`
+- `query`
 
 Agent guidance:
 
