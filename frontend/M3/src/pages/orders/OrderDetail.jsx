@@ -1138,7 +1138,8 @@ const OrderDetail = () => {
     if (currentStatus === "pending") return ["pending", "processing", "cancel"];
     if (currentStatus === "processing") return ["processing", "dispatch", "cancel"];
     if (currentStatus === "dispatch") return ["dispatch", "cancel"];
-    if (currentStatus === "cancel") return ["cancel"];
+    // Allow an administrator to correct an order that was cancelled in error.
+    if (currentStatus === "cancel") return ["cancel", "dispatch"];
     return ["pending", "processing", "dispatch", "cancel"];
   })();
   const selectedStatus = statusOptions.includes(displayStatus) ? displayStatus : statusOptions[0];
@@ -1212,7 +1213,7 @@ const OrderDetail = () => {
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
-          {normalizeStatus(selectedStatus) === "dispatch" && currentStatus === "processing" && (
+          {normalizeStatus(selectedStatus) === "dispatch" && (currentStatus === "processing" || currentStatus === "cancel") && (
             <>
               <select
                 className="select"
