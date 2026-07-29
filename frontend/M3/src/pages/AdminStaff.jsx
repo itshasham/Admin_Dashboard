@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './AdminStaff.css';
 import { API_BASE_URL } from '../config/api';
@@ -217,7 +217,7 @@ const AdminStaff = () => {
       <div className="admin-staff">
         <div className="access-denied">
           <h1>Access Denied</h1>
-          <p>You don't have permission to access Staff Management.</p>
+          <p>You don&apos;t have permission to access Staff Management.</p>
           <p>Only Managers and CEOs can access this page.</p>
           <button onClick={() => navigate('/admin/dashboard')} className="back-btn" type="button">
             Back to Dashboard
@@ -343,6 +343,7 @@ const AdminStaff = () => {
                       <option value="Admin">Admin</option>
                       <option value="Manager">Manager</option>
                       <option value="CEO">CEO</option>
+                      <option value="ReadOnly">Read-only accountant</option>
                     </select>
                   ) : (
                     <select

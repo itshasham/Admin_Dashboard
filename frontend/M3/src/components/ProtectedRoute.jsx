@@ -21,6 +21,13 @@ const ProtectedRoute = ({ children, allowedRoles = null }) => {
     return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
   }
 
+  if (
+    role === "ReadOnly" &&
+    location.pathname !== "/admin/expenses"
+  ) {
+    return <Navigate to="/admin/expenses" replace />;
+  }
+
   if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
     const hasAccess = allowedRoles.includes(role);
     if (!hasAccess) {

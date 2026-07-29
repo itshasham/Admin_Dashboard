@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
-import { BookOpenText, LayoutDashboard, LogOut, MessageCircle, Package, ShoppingBag, Stethoscope, UsersRound } from "lucide-react";
+import { BookOpenText, LayoutDashboard, LockKeyhole, LogOut, MessageCircle, Package, ReceiptText, ShoppingBag, Stethoscope, UsersRound } from "lucide-react";
 
 // Lazy-loaded pages to reduce initial bundle
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
@@ -45,8 +45,11 @@ const CloudinaryPage = lazy(() => import("./pages/cloudinary/CloudinaryPage"));
 const ContactUsList = lazy(() => import("./pages/contacts/ContactUsList"));
 const GoogleMapLinkList = lazy(() => import("./pages/google-map-links/GoogleMapLinkList"));
 const PeopleAssets = lazy(() => import("./pages/people-assets/PeopleAssets"));
+const DeletePinSettings = lazy(() => import("./pages/security/DeletePinSettings"));
+const ExpenseManagement = lazy(() => import("./pages/expenses/ExpenseManagement"));
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import { DeletePinProvider } from "./components/DeletePinProvider";
 
 const RedirectToResetPassword = () => {
   const { token } = useParams();
@@ -99,15 +102,23 @@ const AdminGlobalNavigation = () => {
     // Keep a safe fallback when browser storage is unavailable.
   }
 
-  const links = [
+  const standardLinks = [
     { label: "Overview", path: "/admin/dashboard", icon: LayoutDashboard },
     { label: "Orders", path: "/admin/orders", icon: ShoppingBag },
+    { label: "Expenses", path: "/admin/expenses", icon: ReceiptText },
     { label: "Retail", path: "/admin/products", icon: Package },
     { label: "Clinical", path: "/admin/clinical-products", icon: Stethoscope },
     { label: "People", path: "/admin/people-assets", icon: UsersRound },
     { label: "Content", path: "/admin/blogs", icon: BookOpenText },
     { label: "WhatsApp", path: "/admin/whatsapp", icon: MessageCircle },
+    ...(adminRole === "CEO"
+      ? [{ label: "Delete PIN", path: "/admin/security/delete-pin", icon: LockKeyhole }]
+      : []),
   ];
+  const links =
+    adminRole === "ReadOnly"
+      ? [{ label: "Expenses", path: "/admin/expenses", icon: ReceiptText }]
+      : standardLinks;
 
   const logout = () => {
     localStorage.removeItem("adminToken");
@@ -171,10 +182,11 @@ const AdminGlobalNavigation = () => {
 const App = () => {
   return (
     <BrowserRouter>
-      <AdminTitleManager />
-      <AdminGlobalNavigation />
-      <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
-        <Routes>
+      <DeletePinProvider>
+        <AdminTitleManager />
+        <AdminGlobalNavigation />
+        <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
+          <Routes>
           {/* Root: decide where to go based on auth */}
           <Route path="/" element={<RootRedirect />} />
           {/* Public auth routes */}
@@ -245,6 +257,14 @@ const App = () => {
             element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><PeopleAssets /></ProtectedRoute>}
           />
           <Route
+            path="/admin/expenses"
+            element={<ProtectedRoute allowedRoles={["Admin", "Manager", "CEO", "ReadOnly"]}><ExpenseManagement /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/security/delete-pin"
+            element={<ProtectedRoute allowedRoles={["CEO"]}><DeletePinSettings /></ProtectedRoute>}
+          />
+          <Route
             path="/admin/whatsapp"
             element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><WhatsAppCampaign /></ProtectedRoute>}
           />
@@ -279,8 +299,9 @@ const App = () => {
 
           {/* Optional: catch-all to root */}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+          </Routes>
+        </Suspense>
+      </DeletePinProvider>
     </BrowserRouter>
   );
 }

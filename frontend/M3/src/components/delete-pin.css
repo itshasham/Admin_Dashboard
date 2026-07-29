@@ -1,0 +1,181 @@
+.delete-pin-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 22, 20, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.delete-pin-dialog {
+  position: relative;
+  width: min(100%, 440px);
+  overflow: hidden;
+  padding: 34px;
+  border: 1px solid rgba(123, 51, 45, 0.16);
+  border-radius: 24px;
+  background: #fffdf9;
+  color: #1f2d2b;
+  box-shadow: 0 28px 90px rgba(9, 26, 22, 0.32);
+}
+
+.delete-pin-accent {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  background: linear-gradient(90deg, #a13e36, #d98e6f);
+}
+
+.delete-pin-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 11px;
+  background: #f3eee8;
+  color: #53625f;
+  cursor: pointer;
+}
+
+.delete-pin-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 20px;
+  place-items: center;
+  border-radius: 16px;
+  background: #f8e4dc;
+  color: #943b35;
+}
+
+.delete-pin-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: #8b4038;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.delete-pin-dialog h2 {
+  margin: 0;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: clamp(1.55rem, 4vw, 2rem);
+  letter-spacing: -0.035em;
+}
+
+.delete-pin-copy {
+  margin: 10px 0 18px;
+  color: #63706d;
+  line-height: 1.6;
+}
+
+.delete-pin-warning {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 22px;
+  padding: 11px 13px;
+  border: 1px solid #efd0c6;
+  border-radius: 12px;
+  background: #fff2ed;
+  color: #843a34;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.delete-pin-dialog label > span {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.delete-pin-dialog label > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid #cfd9d5;
+  border-radius: 13px;
+  background: #fff;
+  color: #73807d;
+}
+
+.delete-pin-dialog input {
+  width: 100%;
+  min-width: 0;
+  padding: 14px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #172522;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.38em;
+}
+
+.delete-pin-dialog small {
+  display: block;
+  margin-top: 7px;
+  color: #7a8784;
+  font-size: 0.76rem;
+}
+
+.delete-pin-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.delete-pin-actions button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.delete-pin-actions .secondary {
+  background: #edf2ef;
+  color: #3f504c;
+}
+
+.delete-pin-actions .danger {
+  background: #943b35;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(148, 59, 53, 0.2);
+}
+
+.delete-pin-actions .danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 520px) {
+  .delete-pin-layer {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .delete-pin-dialog {
+    padding: 30px 22px 22px;
+    border-radius: 22px;
+  }
+
+  .delete-pin-actions {
+    grid-template-columns: 1fr;
+  }
+}

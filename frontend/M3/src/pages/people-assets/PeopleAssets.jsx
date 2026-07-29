@@ -1,15 +1,22 @@
+/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowUpRight,
-  BadgeCheck,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Bike,
   Box,
-  BriefcaseBusiness,
   Building2,
+  CalendarDays,
+  Camera,
   Check,
+  CheckCircle2,
   ChevronRight,
   CircleAlert,
   ClipboardCheck,
+  Clock3,
   FileCheck2,
+  FileText,
   Filter,
   HardDrive,
   IdCard,
@@ -17,8 +24,6 @@ import {
   Mail,
   MapPin,
   Monitor,
-  MoreHorizontal,
-  MousePointer2,
   PackageCheck,
   Pencil,
   Phone,
@@ -27,6 +32,9 @@ import {
   Search,
   ShieldCheck,
   Smartphone,
+  Stethoscope,
+  Tablet,
+  Trash2,
   Undo2,
   UserRound,
   UsersRound,
@@ -37,22 +45,84 @@ import { API_BASE_URL } from "../../config/api";
 import { parseApiError } from "../../utils/api-error";
 import "./people-assets.css";
 
+const ITEM_TYPES = [
+  "Laptop",
+  "Desktop",
+  "Tablet",
+  "Mobile",
+  "Monitor",
+  "Keyboard",
+  "Mouse",
+  "Bike",
+  "Camera",
+  "SIM",
+  "Medical Equipment",
+  "Office Furniture",
+  "Other",
+];
+const CONDITION_STATUSES = ["New", "Good", "Fair", "Damaged", "Under Maintenance"];
+const LIFECYCLE_STATUSES = [
+  "Purchased",
+  "Registered",
+  "Inspected",
+  "Available",
+  "Under Maintenance",
+  "Returned",
+  "Transferred",
+  "Retired",
+  "Sold",
+];
+const EMPLOYMENT_STATUSES = ["Draft", "Active", "On Leave", "Inactive", "Terminated"];
+const ISSUE_TYPES = [
+  "Issue",
+  "Maintenance",
+  "Accident",
+  "Traffic Fine",
+  "Insurance Claim",
+  "Expense",
+];
+const STEPS = [
+  { title: "Identity", hint: "Who they are", icon: UserRound },
+  { title: "Employment", hint: "Where they work", icon: Building2 },
+  { title: "Documents", hint: "Verify identity", icon: FileCheck2 },
+  { title: "Review", hint: "Activate record", icon: ClipboardCheck },
+];
+
 const EMPTY_EMPLOYEE = {
   fullName: "",
   phone: "",
   email: "",
   cnic: "",
   currentAddress: "",
-  billProofUrl: "",
+  emergencyContact: { name: "", relationship: "", phone: "" },
+  office: "",
+  department: "",
+  designation: "",
+  joiningDate: "",
+  employmentStatus: "Draft",
 };
-
+const EMPTY_OFFICE = {
+  name: "",
+  code: "",
+  city: "",
+  address: "",
+  managerName: "",
+  phone: "",
+  status: "Active",
+};
 const EMPTY_ASSET = {
   assetTag: "",
   itemType: "Laptop",
   brandModel: "",
   serialNumber: "",
+  office: "",
+  purchaseDate: "",
+  purchasePrice: "",
+  supplier: "",
+  warrantyExpiresAt: "",
+  currentLocation: "",
   conditionStatus: "Good",
-  assignmentStatus: "Unassigned",
+  lifecycleStatus: "Available",
   specs: {
     processor: "",
     ram: "",
@@ -60,14 +130,39 @@ const EMPTY_ASSET = {
     operatingSystem: "",
     notes: "",
   },
+  bikeDetails: {
+    manufacturingYear: "",
+    registrationNumber: "",
+    engineNumber: "",
+    chassisNumber: "",
+    color: "",
+    currentMileage: "",
+    fuelType: "Petrol",
+    insuranceExpiresAt: "",
+    keysIssued: "1",
+    helmetIssued: false,
+    accessoriesIssued: "",
+    lastServiceDate: "",
+    nextServiceDate: "",
+    nextServiceMileage: "",
+  },
+};
+const EMPTY_ISSUE = {
+  assetId: "",
+  reportedByEmployeeId: "",
+  type: "Issue",
+  title: "",
+  description: "",
+  severity: "Medium",
+  status: "Reported",
+  vendor: "",
+  cost: "",
+  resolution: "",
+  nextServiceDate: "",
+  nextServiceMileage: "",
 };
 
-const ITEM_TYPES = ["Laptop", "Monitor", "Keyboard", "Mouse", "Mobile", "Other"];
-const CONDITION_STATUSES = ["New", "Good", "Damaged", "Under Maintenance"];
-const ASSIGNMENT_FILTERS = ["All", "Unassigned", "Assigned", "Retired"];
-
 const getId = (value) => String(value?._id || value?.id || value || "");
-
 const authHeaders = () => {
   try {
     const token = localStorage.getItem("adminToken");
@@ -76,116 +171,135 @@ const authHeaders = () => {
     return {};
   }
 };
-
-const readJson = async (response, fallbackMessage) => {
+const currentRole = () => {
+  try {
+    return JSON.parse(localStorage.getItem("adminData") || "{}")?.role || "";
+  } catch {
+    return "";
+  }
+};
+const readJson = async (response, fallback) => {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const parsed = parseApiError(payload, fallbackMessage);
+    const parsed = parseApiError(payload, fallback);
     throw new Error(parsed.issues[0] || parsed.summary);
   }
   return payload;
 };
-
 const formatCnicInput = (value) => {
   const digits = String(value || "").replace(/\D/g, "").slice(0, 13);
   if (digits.length <= 5) return digits;
   if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
   return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
 };
-
-const formatDate = (value, includeYear = true) => {
+const formatDate = (value) => {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString("en-PK", {
     day: "2-digit",
     month: "short",
-    ...(includeYear ? { year: "numeric" } : {}),
+    year: "numeric",
   });
 };
-
-const getInitials = (name) =>
+const money = (value) =>
+  `Rs ${new Intl.NumberFormat("en-PK", { maximumFractionDigits: 0 }).format(
+    Number(value) || 0
+  )}`;
+const initials = (name) =>
   String(name || "Employee")
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "EM";
-
-const getAssetIcon = (type) => {
-  if (type === "Laptop") return Laptop;
+const assetIcon = (type) => {
+  if (["Laptop", "Desktop"].includes(type)) return Laptop;
   if (type === "Monitor") return Monitor;
-  if (type === "Mouse") return MousePointer2;
   if (type === "Mobile") return Smartphone;
-  if (type === "Keyboard") return HardDrive;
+  if (type === "Tablet") return Tablet;
+  if (type === "Bike") return Bike;
+  if (type === "Camera") return Camera;
+  if (type === "Medical Equipment") return Stethoscope;
+  if (["Keyboard", "Mouse"].includes(type)) return HardDrive;
   return Box;
 };
-
-const specEntries = (specs) =>
-  Object.entries(specs || {})
-    .filter(([, value]) => String(value || "").trim())
-    .map(([key, value]) => [
-      key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase()),
-      value,
-    ]);
-
-const assignmentTone = (status) =>
-  status === "Assigned" ? "assigned" : status === "Retired" ? "retired" : "available";
-
-const conditionTone = (condition) =>
-  condition === "Damaged"
-    ? "danger"
-    : condition === "Under Maintenance"
-      ? "maintenance"
-      : "healthy";
+const isOpenIssue = (issue) => ["Reported", "In Progress"].includes(issue.status);
 
 const PeopleAssets = () => {
+  const role = currentRole();
+  const isCEO = role === "CEO";
   const [activeView, setActiveView] = useState("employees");
   const [employees, setEmployees] = useState([]);
+  const [offices, setOffices] = useState([]);
   const [assets, setAssets] = useState([]);
+  const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
-  const [assetFilter, setAssetFilter] = useState("All");
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [officeFilter, setOfficeFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [modal, setModal] = useState(null);
+  const [employeeStep, setEmployeeStep] = useState(0);
   const [employeeDraft, setEmployeeDraft] = useState(EMPTY_EMPLOYEE);
+  const [employeeFiles, setEmployeeFiles] = useState({});
+  const [existingDocumentStatus, setExistingDocumentStatus] = useState({});
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [officeDraft, setOfficeDraft] = useState(EMPTY_OFFICE);
   const [assetDraft, setAssetDraft] = useState(EMPTY_ASSET);
+  const [assetFiles, setAssetFiles] = useState({});
+  const [issueDraft, setIssueDraft] = useState(EMPTY_ISSUE);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [assignmentDraft, setAssignmentDraft] = useState({
     employeeId: "",
     assetId: "",
+    issueCondition: "Good",
+    issueNotes: "",
   });
-  const [billProofFile, setBillProofFile] = useState(null);
+  const [assignmentPhoto, setAssignmentPhoto] = useState(null);
+  const [returnDraft, setReturnDraft] = useState({
+    asset: null,
+    returnCondition: "Good",
+    returnNotes: "",
+  });
+  const [returnPhoto, setReturnPhoto] = useState(null);
+  const [transferDraft, setTransferDraft] = useState({
+    targetType: "employee",
+    targetId: "",
+    officeId: "",
+    reason: "",
+  });
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const fetchWorkspace = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);
     setError("");
     try {
-      const headers = { ...authHeaders() };
-      const [employeesResponse, assetsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/employees?limit=100`, {
-          headers,
-          cache: "no-store",
-        }),
-        fetch(`${API_BASE_URL}/assets?limit=150`, {
-          headers,
-          cache: "no-store",
-        }),
+      const headers = authHeaders();
+      const responses = await Promise.all([
+        fetch(`${API_BASE_URL}/employees?limit=100`, { headers, cache: "no-store" }),
+        fetch(`${API_BASE_URL}/offices`, { headers, cache: "no-store" }),
+        fetch(`${API_BASE_URL}/assets?limit=150`, { headers, cache: "no-store" }),
+        fetch(`${API_BASE_URL}/asset-issues`, { headers, cache: "no-store" }),
       ]);
-
-      const [employeePayload, assetPayload] = await Promise.all([
-        readJson(employeesResponse, "Could not load employee records"),
-        readJson(assetsResponse, "Could not load company assets"),
-      ]);
-
-      setEmployees(Array.isArray(employeePayload?.data) ? employeePayload.data : []);
-      setAssets(Array.isArray(assetPayload?.data) ? assetPayload.data : []);
+      const [employeePayload, officePayload, assetPayload, issuePayload] =
+        await Promise.all([
+          readJson(responses[0], "Could not load employees"),
+          readJson(responses[1], "Could not load offices"),
+          readJson(responses[2], "Could not load company assets"),
+          readJson(responses[3], "Could not load asset issues"),
+        ]);
+      setEmployees(Array.isArray(employeePayload.data) ? employeePayload.data : []);
+      setOffices(Array.isArray(officePayload.data) ? officePayload.data : []);
+      setAssets(Array.isArray(assetPayload.data) ? assetPayload.data : []);
+      setIssues(Array.isArray(issuePayload.data) ? issuePayload.data : []);
       setLastUpdated(new Date());
     } catch (requestError) {
-      setError(requestError?.message || "Could not load the people and equipment workspace");
+      setError(requestError.message || "Could not load the company registry");
     } finally {
       setLoading(false);
     }
@@ -196,195 +310,393 @@ const PeopleAssets = () => {
   }, [fetchWorkspace]);
 
   useEffect(() => {
-    if (!modal) return undefined;
-    const closeOnEscape = (event) => {
-      if (event.key === "Escape" && !saving) setModal(null);
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", closeOnEscape);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [modal, saving]);
-
-  useEffect(() => {
     if (!notice) return undefined;
-    const timer = window.setTimeout(() => setNotice(""), 4200);
+    const timer = window.setTimeout(() => setNotice(""), 4500);
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const employeeById = useMemo(
+  useEffect(() => {
+    if (!modal) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onEscape = (event) => {
+      if (event.key === "Escape" && !saving) setModal(null);
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [modal, saving]);
+
+  const loadEmployeeDetail = useCallback(async (id) => {
+    if (!id) return;
+    setSelectedEmployeeId(id);
+    setDetailLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      const payload = await readJson(response, "Could not load employee profile");
+      setSelectedEmployee(payload.data);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const employeeMap = useMemo(
     () => new Map(employees.map((employee) => [getId(employee), employee])),
     [employees]
   );
-
-  const assetCountsByEmployee = useMemo(() => {
-    const counts = new Map();
-    assets.forEach((asset) => {
-      const employeeId = getId(asset.assignedEmployee);
-      if (employeeId) counts.set(employeeId, (counts.get(employeeId) || 0) + 1);
-    });
-    return counts;
-  }, [assets]);
-
-  const selectedEmployee = employeeById.get(selectedEmployeeId) || null;
-  const selectedEmployeeAssets = useMemo(
-    () =>
-      assets.filter(
-        (asset) => getId(asset.assignedEmployee) === selectedEmployeeId
-      ),
-    [assets, selectedEmployeeId]
+  const officeMap = useMemo(
+    () => new Map(offices.map((office) => [getId(office), office])),
+    [offices]
+  );
+  const availableAssets = useMemo(
+    () => assets.filter((asset) => asset.assignmentStatus === "Unassigned"),
+    [assets]
+  );
+  const counts = useMemo(
+    () => ({
+      employees: employees.length,
+      offices: offices.filter((office) => office.status === "Active").length,
+      assigned: assets.filter((asset) => asset.assignmentStatus === "Assigned").length,
+      openIssues: issues.filter(isOpenIssue).length,
+    }),
+    [assets, employees.length, issues, offices]
   );
 
   const filteredEmployees = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return employees;
-    return employees.filter((employee) =>
-      [
-        employee.fullName,
-        employee.email,
-        employee.phone,
-        employee.cnic,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle)
-    );
-  }, [employees, search]);
+    const needle = search.toLowerCase().trim();
+    return employees.filter((employee) => {
+      const officeId = getId(employee.office);
+      const officeMatches = officeFilter === "All" || officeId === officeFilter;
+      const statusMatches =
+        statusFilter === "All" || employee.employmentStatus === statusFilter;
+      const searchMatches =
+        !needle ||
+        [
+          employee.employeeCode,
+          employee.fullName,
+          employee.email,
+          employee.phone,
+          employee.cnic,
+          employee.designation,
+          employee.office?.city,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle);
+      return officeMatches && statusMatches && searchMatches;
+    });
+  }, [employees, officeFilter, search, statusFilter]);
 
   const filteredAssets = useMemo(() => {
-    const needle = search.trim().toLowerCase();
+    const needle = search.toLowerCase().trim();
     return assets.filter((asset) => {
-      const matchesFilter =
-        assetFilter === "All" || asset.assignmentStatus === assetFilter;
-      const matchesSearch =
+      const officeMatches =
+        officeFilter === "All" || getId(asset.office) === officeFilter;
+      const statusMatches =
+        statusFilter === "All" ||
+        asset.assignmentStatus === statusFilter ||
+        asset.lifecycleStatus === statusFilter ||
+        asset.itemType === statusFilter;
+      const searchMatches =
         !needle ||
         [
           asset.assetTag,
+          asset.itemType,
           asset.brandModel,
           asset.serialNumber,
-          asset.itemType,
+          asset.bikeDetails?.registrationNumber,
           asset.assignedEmployee?.fullName,
         ]
           .join(" ")
           .toLowerCase()
           .includes(needle);
-      return matchesFilter && matchesSearch;
+      return officeMatches && statusMatches && searchMatches;
     });
-  }, [assetFilter, assets, search]);
+  }, [assets, officeFilter, search, statusFilter]);
 
-  const availableAssets = useMemo(
-    () => assets.filter((asset) => asset.assignmentStatus === "Unassigned"),
-    [assets]
-  );
+  const filteredOffices = useMemo(() => {
+    const needle = search.toLowerCase().trim();
+    return offices.filter(
+      (office) =>
+        !needle ||
+        [office.name, office.code, office.city, office.managerName]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle)
+    );
+  }, [offices, search]);
 
-  const totals = useMemo(
-    () => ({
-      people: employees.length,
-      assigned: assets.filter((asset) => asset.assignmentStatus === "Assigned").length,
-      available: assets.filter((asset) => asset.assignmentStatus === "Unassigned").length,
-      attention: assets.filter((asset) =>
-        ["Damaged", "Under Maintenance"].includes(asset.conditionStatus)
-      ).length,
-    }),
-    [assets, employees.length]
-  );
+  const filteredIssues = useMemo(() => {
+    const needle = search.toLowerCase().trim();
+    return issues.filter((issue) => {
+      const officeMatches =
+        officeFilter === "All" || getId(issue.office) === officeFilter;
+      const statusMatches = statusFilter === "All" || issue.status === statusFilter;
+      const searchMatches =
+        !needle ||
+        [
+          issue.title,
+          issue.type,
+          issue.asset?.assetTag,
+          issue.asset?.brandModel,
+          issue.reportedByEmployee?.fullName,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle);
+      return officeMatches && statusMatches && searchMatches;
+    });
+  }, [issues, officeFilter, search, statusFilter]);
 
   const closeModal = () => {
     if (saving) return;
     setModal(null);
-    setBillProofFile(null);
+    setEmployeeFiles({});
+    setAssetFiles({});
+    setAssignmentPhoto(null);
+    setReturnPhoto(null);
+    if (photoPreview?.startsWith("blob:")) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview("");
   };
 
-  const openEmployeeForm = (employee = null) => {
+  const openEmployeeForm = async (employee = null) => {
+    let source = employee;
+    if (employee && (!employee.activityHistory || !employee.currentAssets)) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/employees/${getId(employee)}`, {
+          headers: authHeaders(),
+        });
+        source = (await readJson(response, "Could not load employee details")).data;
+      } catch (requestError) {
+        setError(requestError.message);
+        return;
+      }
+    }
     setEmployeeDraft(
-      employee
+      source
         ? {
-            fullName: employee.fullName || "",
-            phone: employee.phone || "",
-            email: employee.email || "",
-            cnic: employee.cnic || "",
-            currentAddress: employee.currentAddress || "",
-            billProofUrl: employee.billProofUrl || "",
+            fullName: source.fullName || "",
+            phone: source.phone || "",
+            email: source.email || "",
+            cnic: source.cnic || "",
+            currentAddress: source.currentAddress || "",
+            emergencyContact: {
+              name: source.emergencyContact?.name || "",
+              relationship: source.emergencyContact?.relationship || "",
+              phone: source.emergencyContact?.phone || "",
+            },
+            office: getId(source.office),
+            department: source.department || "",
+            designation: source.designation || "",
+            joiningDate: source.joiningDate
+              ? new Date(source.joiningDate).toISOString().slice(0, 10)
+              : "",
+            employmentStatus: source.employmentStatus || "Draft",
           }
-        : { ...EMPTY_EMPLOYEE }
+        : {
+            ...EMPTY_EMPLOYEE,
+            emergencyContact: { ...EMPTY_EMPLOYEE.emergencyContact },
+            office: offices.length === 1 ? getId(offices[0]) : "",
+          }
     );
-    setBillProofFile(null);
-    setModal({ type: "employee", id: employee ? getId(employee) : "" });
+    setExistingDocumentStatus(source?.documentStatus || {});
+    setPhotoPreview(source?.profilePhoto?.url || "");
+    setEmployeeFiles({});
+    setEmployeeStep(0);
+    setModal({ type: "employee", id: source ? getId(source) : "" });
+  };
+
+  const openOfficeForm = (office = null) => {
+    setOfficeDraft(
+      office
+        ? {
+            name: office.name || "",
+            code: office.code || "",
+            city: office.city || "",
+            address: office.address || "",
+            managerName: office.managerName || "",
+            phone: office.phone || "",
+            status: office.status || "Active",
+          }
+        : { ...EMPTY_OFFICE }
+    );
+    setModal({ type: "office", id: office ? getId(office) : "" });
   };
 
   const openAssetForm = (asset = null) => {
     setAssetDraft(
       asset
         ? {
-            assetTag: asset.assetTag || "",
-            itemType: asset.itemType || "Laptop",
-            brandModel: asset.brandModel || "",
-            serialNumber: asset.serialNumber || "",
-            conditionStatus: asset.conditionStatus || "Good",
-            assignmentStatus: asset.assignmentStatus || "Unassigned",
-            specs: {
-              ...EMPTY_ASSET.specs,
-              ...(asset.specs || {}),
+            ...EMPTY_ASSET,
+            ...asset,
+            office: getId(asset.office),
+            purchaseDate: asset.purchaseDate
+              ? new Date(asset.purchaseDate).toISOString().slice(0, 10)
+              : "",
+            warrantyExpiresAt: asset.warrantyExpiresAt
+              ? new Date(asset.warrantyExpiresAt).toISOString().slice(0, 10)
+              : "",
+            specs: { ...EMPTY_ASSET.specs, ...(asset.specs || {}) },
+            bikeDetails: {
+              ...EMPTY_ASSET.bikeDetails,
+              ...(asset.bikeDetails || {}),
+              insuranceExpiresAt: asset.bikeDetails?.insuranceExpiresAt
+                ? new Date(asset.bikeDetails.insuranceExpiresAt).toISOString().slice(0, 10)
+                : "",
+              lastServiceDate: asset.bikeDetails?.lastServiceDate
+                ? new Date(asset.bikeDetails.lastServiceDate).toISOString().slice(0, 10)
+                : "",
+              nextServiceDate: asset.bikeDetails?.nextServiceDate
+                ? new Date(asset.bikeDetails.nextServiceDate).toISOString().slice(0, 10)
+                : "",
+              accessoriesIssued: Array.isArray(asset.bikeDetails?.accessoriesIssued)
+                ? asset.bikeDetails.accessoriesIssued.join(", ")
+                : "",
             },
           }
         : {
             ...EMPTY_ASSET,
             specs: { ...EMPTY_ASSET.specs },
+            bikeDetails: { ...EMPTY_ASSET.bikeDetails },
+            office: offices.length === 1 ? getId(offices[0]) : "",
           }
     );
+    setAssetFiles({});
     setModal({ type: "asset", id: asset ? getId(asset) : "" });
   };
 
-  const openAssignForm = ({ employeeId = "", assetId = "" } = {}) => {
-    setAssignmentDraft({ employeeId, assetId });
-    setModal({ type: "assignment" });
+  const openIssueForm = (issue = null) => {
+    setIssueDraft(
+      issue
+        ? {
+            assetId: getId(issue.asset),
+            reportedByEmployeeId: getId(issue.reportedByEmployee),
+            type: issue.type || "Issue",
+            title: issue.title || "",
+            description: issue.description || "",
+            severity: issue.severity || "Medium",
+            status: issue.status || "Reported",
+            vendor: issue.vendor || "",
+            cost: issue.cost || "",
+            resolution: issue.resolution || "",
+            nextServiceDate: issue.nextServiceDate
+              ? new Date(issue.nextServiceDate).toISOString().slice(0, 10)
+              : "",
+            nextServiceMileage: issue.nextServiceMileage || "",
+          }
+        : { ...EMPTY_ISSUE }
+    );
+    setModal({ type: "issue", id: issue ? getId(issue) : "" });
   };
 
-  const uploadBillProofIfNeeded = async () => {
-    if (!billProofFile) return employeeDraft.billProofUrl;
+  const uploadEmployeeDocument = async (documentType, file) => {
     const formData = new FormData();
-    formData.append("billProof", billProofFile);
-    const response = await fetch(`${API_BASE_URL}/employees/bill-proof`, {
+    formData.append("documentType", documentType);
+    formData.append("file", file);
+    const response = await fetch(`${API_BASE_URL}/employees/documents`, {
       method: "POST",
-      headers: { ...authHeaders() },
+      headers: authHeaders(),
       body: formData,
     });
-    const payload = await readJson(response, "Could not upload bill proof");
-    return payload?.data?.url || "";
+    return (await readJson(response, `Could not upload ${documentType}`)).data;
   };
 
-  const saveEmployee = async (event) => {
-    event.preventDefault();
+  const uploadAssetFile = async (kind, file) => {
+    const formData = new FormData();
+    formData.append("kind", kind);
+    formData.append("file", file);
+    const response = await fetch(`${API_BASE_URL}/assets/documents`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: formData,
+    });
+    return (await readJson(response, "Could not upload asset file")).data;
+  };
+
+  const saveEmployee = async () => {
     setSaving(true);
     setError("");
     try {
-      const billProofUrl = await uploadBillProofIfNeeded();
+      const uploaded = {};
+      for (const type of [
+        "profilePhoto",
+        "cnicFront",
+        "cnicBack",
+        "contractDocument",
+        "billProof",
+      ]) {
+        if (employeeFiles[type]) {
+          uploaded[type] = await uploadEmployeeDocument(type, employeeFiles[type]);
+        }
+      }
+      if (employeeFiles.supportingDocument) {
+        uploaded.supportingDocuments = [
+          await uploadEmployeeDocument(
+            "supportingDocument",
+            employeeFiles.supportingDocument
+          ),
+        ];
+      }
       const isEdit = Boolean(modal?.id);
       const response = await fetch(
         `${API_BASE_URL}/employees${isEdit ? `/${modal.id}` : ""}`,
         {
           method: isEdit ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeaders(),
-          },
-          body: JSON.stringify({ ...employeeDraft, billProofUrl }),
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ ...employeeDraft, ...uploaded }),
         }
       );
       const payload = await readJson(
         response,
         isEdit ? "Could not update employee" : "Could not add employee"
       );
-      setNotice(payload?.message || (isEdit ? "Employee updated" : "Employee added"));
-      setModal(null);
-      setBillProofFile(null);
+      setNotice(payload.message || "Employee record saved");
+      closeModal();
       await fetchWorkspace({ quiet: true });
-      if (payload?.data) setSelectedEmployeeId(getId(payload.data));
+      if (payload.data) await loadEmployeeDetail(getId(payload.data));
     } catch (requestError) {
-      setError(requestError?.message || "Could not save employee");
+      setError(requestError.message || "Could not save employee");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const employeeSubmit = (event) => {
+    event.preventDefault();
+    if (employeeStep < STEPS.length - 1) {
+      setEmployeeStep((step) => step + 1);
+      return;
+    }
+    saveEmployee();
+  };
+
+  const saveOffice = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const isEdit = Boolean(modal?.id);
+      const response = await fetch(
+        `${API_BASE_URL}/offices${isEdit ? `/${modal.id}` : ""}`,
+        {
+          method: isEdit ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify(officeDraft),
+        }
+      );
+      const payload = await readJson(response, "Could not save office");
+      setNotice(payload.message || "Office saved");
+      closeModal();
+      await fetchWorkspace({ quiet: true });
+    } catch (requestError) {
+      setError(requestError.message);
     } finally {
       setSaving(false);
     }
@@ -395,7 +707,27 @@ const PeopleAssets = () => {
     setSaving(true);
     setError("");
     try {
-      const isEdit = Boolean(modal?.id);
+      const uploaded = {};
+      if (assetFiles.photo) {
+        const photo = await uploadAssetFile("photo", assetFiles.photo);
+        uploaded.photographs = [...(assetDraft.photographs || []), photo];
+      }
+      if (assetFiles.invoice) {
+        uploaded.invoiceDocument = await uploadAssetFile("invoice", assetFiles.invoice);
+      }
+      const uploadedBikeDocuments = {};
+      if (assetDraft.itemType === "Bike" && assetFiles.registration) {
+        uploadedBikeDocuments.registrationDocument = await uploadAssetFile(
+          "registration",
+          assetFiles.registration
+        );
+      }
+      if (assetDraft.itemType === "Bike" && assetFiles.insurance) {
+        uploadedBikeDocuments.insuranceDocument = await uploadAssetFile(
+          "insurance",
+          assetFiles.insurance
+        );
+      }
       const compactSpecs = Object.fromEntries(
         Object.entries(assetDraft.specs || {}).filter(([, value]) =>
           String(value || "").trim()
@@ -403,1093 +735,1063 @@ const PeopleAssets = () => {
       );
       const body = {
         ...assetDraft,
+        ...uploaded,
         specs: compactSpecs,
+        bikeDetails:
+          assetDraft.itemType === "Bike"
+            ? { ...assetDraft.bikeDetails, ...uploadedBikeDocuments }
+            : undefined,
       };
-      if (!isEdit) delete body.assignmentStatus;
-
+      delete body.assignmentStatus;
+      delete body.assignedEmployee;
+      delete body.officeHistory;
+      const isEdit = Boolean(modal?.id);
       const response = await fetch(
         `${API_BASE_URL}/assets${isEdit ? `/${modal.id}` : ""}`,
         {
           method: isEdit ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeaders(),
-          },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify(body),
         }
       );
-      const payload = await readJson(
-        response,
-        isEdit ? "Could not update asset" : "Could not register asset"
-      );
-      setNotice(payload?.message || (isEdit ? "Asset updated" : "Asset registered"));
-      setModal(null);
+      const payload = await readJson(response, "Could not save company asset");
+      setNotice(payload.message || "Asset saved");
+      closeModal();
       await fetchWorkspace({ quiet: true });
     } catch (requestError) {
-      setError(requestError?.message || "Could not save asset");
+      setError(requestError.message);
     } finally {
       setSaving(false);
     }
   };
 
-  const assignAsset = async (event) => {
+  const saveIssue = async (event) => {
     event.preventDefault();
-    if (!assignmentDraft.assetId || !assignmentDraft.employeeId) return;
     setSaving(true);
     setError("");
     try {
+      const isEdit = Boolean(modal?.id);
+      const response = await fetch(
+        `${API_BASE_URL}/asset-issues${isEdit ? `/${modal.id}` : ""}`,
+        {
+          method: isEdit ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify(issueDraft),
+        }
+      );
+      const payload = await readJson(response, "Could not save issue record");
+      setNotice(payload.message || "Issue record saved");
+      closeModal();
+      await fetchWorkspace({ quiet: true });
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveAssignment = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const issuePhotos = assignmentPhoto
+        ? [await uploadAssetFile("photo", assignmentPhoto)]
+        : [];
       const response = await fetch(
         `${API_BASE_URL}/assets/${assignmentDraft.assetId}/assign`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeaders(),
-          },
-          body: JSON.stringify({ employeeId: assignmentDraft.employeeId }),
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ ...assignmentDraft, issuePhotos }),
         }
       );
       const payload = await readJson(response, "Could not assign asset");
-      setNotice(payload?.message || "Asset assigned");
-      setModal(null);
+      setNotice(payload.message || "Asset assigned");
+      closeModal();
       await fetchWorkspace({ quiet: true });
-      setSelectedEmployeeId(assignmentDraft.employeeId);
+      await loadEmployeeDetail(assignmentDraft.employeeId);
     } catch (requestError) {
-      setError(requestError?.message || "Could not assign asset");
+      setError(requestError.message);
     } finally {
       setSaving(false);
     }
   };
 
-  const unassignAsset = async (asset) => {
-    const assignee = asset.assignedEmployee?.fullName || "this employee";
-    if (
-      !window.confirm(
-        `Return ${asset.assetTag} from ${assignee} to available inventory?`
-      )
-    ) {
-      return;
-    }
+  const returnAsset = (asset) => {
+    setReturnDraft({
+      asset,
+      returnCondition: asset.conditionStatus || "Good",
+      returnNotes: "",
+    });
+    setReturnPhoto(null);
+    setModal({ type: "return" });
+  };
+
+  const saveReturn = async (event) => {
+    event.preventDefault();
     setSaving(true);
-    setError("");
     try {
+      const returnPhotos = returnPhoto
+        ? [await uploadAssetFile("photo", returnPhoto)]
+        : [];
       const response = await fetch(
-        `${API_BASE_URL}/assets/${getId(asset)}/unassign`,
+        `${API_BASE_URL}/assets/${getId(returnDraft.asset)}/unassign`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeaders(),
-          },
-          body: JSON.stringify({}),
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            returnCondition: returnDraft.returnCondition,
+            returnNotes: returnDraft.returnNotes,
+            returnPhotos,
+          }),
         }
       );
       const payload = await readJson(response, "Could not return asset");
-      setNotice(payload?.message || "Asset returned to inventory");
+      setNotice(payload.message);
+      closeModal();
       await fetchWorkspace({ quiet: true });
+      if (selectedEmployeeId) await loadEmployeeDetail(selectedEmployeeId);
     } catch (requestError) {
-      setError(requestError?.message || "Could not return asset");
+      setError(requestError.message);
     } finally {
       setSaving(false);
     }
   };
 
-  const renderEmpty = (kind) => (
-    <div className="people-assets-empty" role="status">
-      <span aria-hidden="true">
-        {kind === "employees" ? <UsersRound size={26} /> : <PackageCheck size={26} />}
-      </span>
-      <div>
-        <strong>
-          {search
-            ? `No ${kind === "employees" ? "employees" : "assets"} match your search`
-            : kind === "employees"
-              ? "Your employee directory is ready"
-              : "Your equipment register is ready"}
-        </strong>
-        <p>
-          {search
-            ? "Try a name, CNIC, asset tag, serial number, or model."
-            : kind === "employees"
-              ? "Add the first employee to start linking company equipment."
-              : "Register the first company-owned item to track its custody."}
-        </p>
-      </div>
-      {!search && (
-        <button
-          type="button"
-          className="pa-button primary"
-          onClick={() => (kind === "employees" ? openEmployeeForm() : openAssetForm())}
-        >
-          <Plus size={16} />
-          {kind === "employees" ? "Add employee" : "Register asset"}
-        </button>
-      )}
-    </div>
-  );
+  const saveTransfer = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const base =
+        transferDraft.targetType === "employee" ? "employees" : "assets";
+      const response = await fetch(
+        `${API_BASE_URL}/${base}/${transferDraft.targetId}/transfer`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            officeId: transferDraft.officeId,
+            reason: transferDraft.reason,
+          }),
+        }
+      );
+      const payload = await readJson(response, "Could not transfer record");
+      setNotice(payload.message);
+      closeModal();
+      await fetchWorkspace({ quiet: true });
+      if (transferDraft.targetType === "employee") {
+        await loadEmployeeDetail(transferDraft.targetId);
+      }
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteRecord = async (kind, id) => {
+    const endpoint = {
+      employee: "employees",
+      office: "offices",
+      asset: "assets",
+      issue: "asset-issues",
+    }[kind];
+    try {
+      const response = await fetch(`${API_BASE_URL}/${endpoint}/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const payload = await readJson(response, `Could not delete ${kind}`);
+      setNotice(payload.message || "Record deleted");
+      if (kind === "employee" && selectedEmployeeId === id) {
+        setSelectedEmployeeId("");
+        setSelectedEmployee(null);
+      }
+      await fetchWorkspace({ quiet: true });
+    } catch (requestError) {
+      if (requestError.message === "Deletion cancelled.") return;
+      setError(requestError.message);
+    }
+  };
+
+  const accessDocument = async (type, action = "view") => {
+    if (!selectedEmployeeId) return;
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/employees/${selectedEmployeeId}/documents/${type}?action=${action}`,
+        { headers: authHeaders(), cache: "no-store" }
+      );
+      const payload = await readJson(response, "Could not open employee document");
+      window.open(payload.data.url, "_blank", "noopener,noreferrer");
+      await loadEmployeeDetail(selectedEmployeeId);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const documentReady = (type) =>
+    Boolean(employeeFiles[type] || existingDocumentStatus[type]);
+  const activationReady =
+    documentReady("profilePhoto") &&
+    documentReady("cnicFront") &&
+    documentReady("cnicBack");
+  const selectedOffice = officeMap.get(employeeDraft.office);
+  const viewCount = {
+    employees: employees.length,
+    offices: offices.length,
+    assets: assets.length,
+    issues: issues.filter(isOpenIssue).length,
+  };
 
   if (loading) {
     return (
-      <div className="people-assets-page people-assets-loading">
-        <div className="pa-loading-mark" aria-hidden="true">
-          <UsersRound size={28} />
-        </div>
-        <strong>Opening people & equipment…</strong>
-        <p>Preparing employee records and the company asset ledger.</p>
+      <div className="registry-loading">
+        <span><Building2 size={26} /></span>
+        <strong>Opening company registry…</strong>
+        <p>Preparing offices, employee identity records, and asset custody.</p>
       </div>
     );
   }
 
   return (
-    <div className="people-assets-page">
-      <header className="pa-hero">
-        <div className="pa-hero-copy">
-          <p className="pa-eyebrow">
-            <ShieldCheck size={15} aria-hidden="true" />
-            Custody workspace
-          </p>
-          <h1>People &amp; equipment</h1>
-          <p>
-            One private record for every employee—and a clear chain of custody
-            for every company-owned device.
-          </p>
+    <div className="registry-page">
+      <header className="registry-hero">
+        <div>
+          <p><ShieldCheck size={15} /> Private operations registry</p>
+          <h1>People, places &amp; property</h1>
+          <span>
+            A complete identity and custody record across every NEES Medical
+            office—from onboarding to equipment return.
+          </span>
         </div>
-        <div className="pa-hero-actions">
+        <div className="registry-hero-actions">
           <button
             type="button"
-            className="pa-button secondary"
-            onClick={() => openAssetForm()}
+            className="registry-button ghost dark"
+            onClick={() => fetchWorkspace()}
           >
-            <BriefcaseBusiness size={17} />
-            Register asset
+            <RefreshCw size={16} /> Refresh
           </button>
           <button
             type="button"
-            className="pa-button primary"
-            onClick={() => openEmployeeForm()}
+            className="registry-button light"
+            onClick={() => openAssetForm()}
+            disabled={!offices.length}
           >
-            <Plus size={17} />
-            Add employee
+            <PackageCheck size={16} /> Register asset
+          </button>
+          <button
+            type="button"
+            className="registry-button primary"
+            onClick={() => openEmployeeForm()}
+            disabled={!offices.length}
+          >
+            <Plus size={16} /> Add employee
           </button>
         </div>
       </header>
 
-      <section className="pa-metrics" aria-label="People and asset summary">
-        <article>
-          <span className="pa-metric-icon people" aria-hidden="true">
-            <UsersRound size={19} />
-          </span>
-          <div>
-            <small>Employees</small>
-            <strong>{totals.people}</strong>
-            <p>Private records</p>
-          </div>
-        </article>
-        <article>
-          <span className="pa-metric-icon assigned" aria-hidden="true">
-            <ClipboardCheck size={19} />
-          </span>
-          <div>
-            <small>In custody</small>
-            <strong>{totals.assigned}</strong>
-            <p>Assigned assets</p>
-          </div>
-        </article>
-        <article>
-          <span className="pa-metric-icon available" aria-hidden="true">
-            <PackageCheck size={19} />
-          </span>
-          <div>
-            <small>Available</small>
-            <strong>{totals.available}</strong>
-            <p>Ready to issue</p>
-          </div>
-        </article>
-        <article>
-          <span className="pa-metric-icon attention" aria-hidden="true">
-            <Wrench size={19} />
-          </span>
-          <div>
-            <small>Needs attention</small>
-            <strong>{totals.attention}</strong>
-            <p>Repair or review</p>
-          </div>
-        </article>
+      <section className="registry-metrics" aria-label="Registry summary">
+        {[
+          ["Employees", counts.employees, "Digitized profiles", UsersRound, "teal"],
+          ["Active offices", counts.offices, "City locations", Building2, "blue"],
+          ["Assets issued", counts.assigned, "In employee custody", ClipboardCheck, "amber"],
+          ["Open issues", counts.openIssues, "Need attention", Wrench, "rose"],
+        ].map(([label, value, hint, Icon, tone]) => (
+          <article key={label}>
+            <span className={tone}><Icon size={19} /></span>
+            <div><small>{label}</small><strong>{value}</strong><p>{hint}</p></div>
+          </article>
+        ))}
       </section>
 
+      {!offices.length && (
+        <section className="registry-onboarding-note">
+          <Building2 size={22} />
+          <div>
+            <strong>Create the first office before onboarding employees or assets.</strong>
+            <p>Office codes become part of permanent employee IDs and asset tags.</p>
+          </div>
+          <button type="button" onClick={() => openOfficeForm()}>
+            <Plus size={15} /> Add first office
+          </button>
+        </section>
+      )}
+
       {(error || notice) && (
-        <div
-          className={`pa-message ${error ? "error" : "success"}`}
-          role={error ? "alert" : "status"}
-        >
+        <div className={`registry-message ${error ? "error" : "success"}`} role={error ? "alert" : "status"}>
           {error ? <CircleAlert size={18} /> : <Check size={18} />}
           <span>{error || notice}</span>
-          <button
-            type="button"
-            onClick={() => (error ? setError("") : setNotice(""))}
-            aria-label="Dismiss message"
-          >
-            <X size={16} />
+          <button type="button" onClick={() => (error ? setError("") : setNotice(""))}>
+            <X size={15} />
           </button>
         </div>
       )}
 
-      <section className="pa-workspace">
-        <div className="pa-toolbar">
-          <div className="pa-view-switch" role="tablist" aria-label="Workspace view">
+      <section className="registry-workspace">
+        <div className="registry-tabs" role="tablist" aria-label="Registry views">
+          {[
+            ["employees", "Employees", UsersRound],
+            ["offices", "Offices", Building2],
+            ["assets", "Assets", PackageCheck],
+            ["issues", "Issues & maintenance", Wrench],
+          ].map(([key, label, Icon]) => (
             <button
+              key={key}
               type="button"
               role="tab"
-              aria-selected={activeView === "employees"}
-              className={activeView === "employees" ? "active" : ""}
+              aria-selected={activeView === key}
+              className={activeView === key ? "active" : ""}
               onClick={() => {
-                setActiveView("employees");
+                setActiveView(key);
                 setSearch("");
+                setStatusFilter("All");
               }}
             >
-              <UsersRound size={16} />
-              Employee directory
-              <span>{employees.length}</span>
+              <Icon size={16} /> {label}<span>{viewCount[key]}</span>
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeView === "assets"}
-              className={activeView === "assets" ? "active" : ""}
-              onClick={() => {
-                setActiveView("assets");
-                setSearch("");
-              }}
-            >
-              <BriefcaseBusiness size={16} />
-              Asset inventory
-              <span>{assets.length}</span>
-            </button>
-          </div>
-
-          <div className="pa-toolbar-tools">
-            <label className="pa-search">
-              <Search size={17} aria-hidden="true" />
-              <span className="pa-sr-only">
-                Search {activeView === "employees" ? "employees" : "assets"}
-              </span>
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={
-                  activeView === "employees"
-                    ? "Search name, CNIC, phone…"
-                    : "Search tag, serial, model…"
-                }
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  aria-label="Clear search"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </label>
-            <button
-              type="button"
-              className="pa-icon-button"
-              onClick={() => fetchWorkspace({ quiet: true })}
-              aria-label="Refresh records"
-              title={
-                lastUpdated
-                  ? `Last updated ${lastUpdated.toLocaleTimeString("en-PK", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}`
-                  : "Refresh records"
-              }
-            >
-              <RefreshCw size={17} />
-            </button>
-          </div>
+          ))}
         </div>
 
-        {activeView === "assets" && (
-          <div className="pa-filter-row" aria-label="Asset assignment filters">
-            <span>
-              <Filter size={14} />
-              Status
-            </span>
-            {ASSIGNMENT_FILTERS.map((filter) => (
-              <button
-                type="button"
-                key={filter}
-                className={assetFilter === filter ? "active" : ""}
-                onClick={() => setAssetFilter(filter)}
-              >
-                {filter === "Unassigned" ? "Available" : filter}
-                <small>
-                  {filter === "All"
-                    ? assets.length
-                    : assets.filter((asset) => asset.assignmentStatus === filter).length}
-                </small>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {activeView === "employees" ? (
-          filteredEmployees.length ? (
-            <div className="pa-table-wrap">
-              <table className="pa-table">
-                <caption className="pa-sr-only">
-                  Employees, contact information, CNIC, and assigned equipment count.
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Employee</th>
-                    <th scope="col">Contact</th>
-                    <th scope="col">CNIC</th>
-                    <th scope="col">Equipment</th>
-                    <th scope="col">Added</th>
-                    <th scope="col"><span className="pa-sr-only">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredEmployees.map((employee) => {
-                    const employeeId = getId(employee);
-                    const equipmentCount = assetCountsByEmployee.get(employeeId) || 0;
-                    return (
-                      <tr key={employeeId}>
-                        <td data-label="Employee">
-                          <button
-                            type="button"
-                            className="pa-person"
-                            onClick={() => setSelectedEmployeeId(employeeId)}
-                          >
-                            <span aria-hidden="true">{getInitials(employee.fullName)}</span>
-                            <span>
-                              <strong>{employee.fullName}</strong>
-                              <small>{employee.email}</small>
-                            </span>
-                          </button>
-                        </td>
-                        <td data-label="Contact">
-                          <a className="pa-contact-link" href={`tel:${employee.phone}`}>
-                            {employee.phone}
-                          </a>
-                        </td>
-                        <td data-label="CNIC"><code>{employee.cnic}</code></td>
-                        <td data-label="Equipment">
-                          <span
-                            className={`pa-count-pill${equipmentCount ? " has-assets" : ""}`}
-                          >
-                            {equipmentCount} {equipmentCount === 1 ? "item" : "items"}
-                          </span>
-                        </td>
-                        <td data-label="Added">{formatDate(employee.createdAt)}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="pa-row-action"
-                            onClick={() => setSelectedEmployeeId(employeeId)}
-                            aria-label={`View ${employee.fullName}`}
-                          >
-                            <ChevronRight size={17} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            renderEmpty("employees")
-          )
-        ) : filteredAssets.length ? (
-          <div className="pa-table-wrap">
-            <table className="pa-table asset-table">
-              <caption className="pa-sr-only">
-                Company asset inventory with serial, condition, and current assignee.
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Asset</th>
-                  <th scope="col">Serial number</th>
-                  <th scope="col">Key specifications</th>
-                  <th scope="col">Condition</th>
-                  <th scope="col">Custody</th>
-                  <th scope="col"><span className="pa-sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAssets.map((asset) => {
-                  const AssetIcon = getAssetIcon(asset.itemType);
-                  const specs = specEntries(asset.specs).slice(0, 3);
-                  return (
-                    <tr key={getId(asset)}>
-                      <td data-label="Asset">
-                        <div className="pa-asset-name">
-                          <span aria-hidden="true"><AssetIcon size={18} /></span>
-                          <div>
-                            <strong>{asset.brandModel}</strong>
-                            <small>{asset.assetTag} · {asset.itemType}</small>
-                          </div>
-                        </div>
-                      </td>
-                      <td data-label="Serial number"><code>{asset.serialNumber}</code></td>
-                      <td data-label="Specifications">
-                        <div className="pa-spec-line">
-                          {specs.length
-                            ? specs.map(([label, value]) => (
-                                <span key={label}>{value}</span>
-                              ))
-                            : <span>Not recorded</span>}
-                        </div>
-                      </td>
-                      <td data-label="Condition">
-                        <span className={`pa-condition ${conditionTone(asset.conditionStatus)}`}>
-                          {asset.conditionStatus}
-                        </span>
-                      </td>
-                      <td data-label="Custody">
-                        <div className="pa-custody">
-                          <span className={`pa-status-dot ${assignmentTone(asset.assignmentStatus)}`} />
-                          <span>
-                            <strong>
-                              {asset.assignedEmployee?.fullName ||
-                                (asset.assignmentStatus === "Retired" ? "Retired" : "Available")}
-                            </strong>
-                            <small>
-                              {asset.assignedDate
-                                ? `Since ${formatDate(asset.assignedDate, false)}`
-                                : asset.assignmentStatus === "Unassigned"
-                                  ? "Ready to issue"
-                                  : "Out of circulation"}
-                            </small>
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="pa-row-actions">
-                          {asset.assignmentStatus === "Unassigned" && (
-                            <button
-                              type="button"
-                              className="pa-small-action issue"
-                              onClick={() => openAssignForm({ assetId: getId(asset) })}
-                            >
-                              Issue
-                            </button>
-                          )}
-                          {asset.assignmentStatus === "Assigned" && (
-                            <button
-                              type="button"
-                              className="pa-small-action return"
-                              onClick={() => unassignAsset(asset)}
-                              disabled={saving}
-                            >
-                              Return
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="pa-row-action"
-                            onClick={() => openAssetForm(asset)}
-                            aria-label={`Edit ${asset.assetTag}`}
-                          >
-                            <MoreHorizontal size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          renderEmpty("assets")
-        )}
-      </section>
-
-      {selectedEmployee && (
-        <>
+        <div className="registry-toolbar">
+          <label className="registry-search">
+            <Search size={17} />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={`Search ${activeView}…`}
+            />
+          </label>
+          {activeView !== "offices" && (
+            <label className="registry-filter">
+              <MapPin size={16} />
+              <select value={officeFilter} onChange={(event) => setOfficeFilter(event.target.value)}>
+                <option value="All">All offices</option>
+                {offices.map((office) => (
+                  <option value={getId(office)} key={getId(office)}>
+                    {office.code} · {office.city}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {["employees", "assets", "issues"].includes(activeView) && (
+            <label className="registry-filter">
+              <Filter size={16} />
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="All">All statuses</option>
+                {activeView === "employees" &&
+                  EMPLOYMENT_STATUSES.map((status) => <option key={status}>{status}</option>)}
+                {activeView === "assets" &&
+                  ["Unassigned", "Assigned", "Retired", "Bike", "Laptop", "Tablet"].map((status) => (
+                    <option key={status}>{status}</option>
+                  ))}
+                {activeView === "issues" &&
+                  ["Reported", "In Progress", "Resolved", "Closed"].map((status) => (
+                    <option key={status}>{status}</option>
+                  ))}
+              </select>
+            </label>
+          )}
+          <span className="registry-updated">
+            Updated {lastUpdated ? lastUpdated.toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" }) : "—"}
+          </span>
           <button
             type="button"
-            className="pa-drawer-backdrop"
-            onClick={() => setSelectedEmployeeId("")}
-            aria-label="Close employee profile"
-          />
-          <aside
-            className="pa-profile-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="employee-profile-title"
+            className="registry-button primary compact"
+            onClick={() =>
+              activeView === "employees"
+                ? openEmployeeForm()
+                : activeView === "offices"
+                  ? openOfficeForm()
+                  : activeView === "assets"
+                    ? openAssetForm()
+                    : openIssueForm()
+            }
+            disabled={activeView !== "offices" && !offices.length}
           >
-            <div className="pa-drawer-head">
-              <span>Employee record</span>
-              <div>
+            <Plus size={15} /> Add {activeView === "issues" ? "record" : activeView.slice(0, -1)}
+          </button>
+        </div>
+
+        {activeView === "employees" && (
+          <div className={`employee-workspace ${selectedEmployeeId ? "has-profile" : ""}`}>
+            <div className="employee-directory">
+              {filteredEmployees.length ? (
+                filteredEmployees.map((employee) => {
+                  const active = selectedEmployeeId === getId(employee);
+                  const documentCount = Object.values(employee.documentStatus || {}).filter(
+                    (value) => value === true
+                  ).length;
+                  return (
+                    <article
+                      className={`employee-row ${active ? "selected" : ""}`}
+                      key={getId(employee)}
+                      onClick={() => loadEmployeeDetail(getId(employee))}
+                    >
+                      <div className="employee-avatar">
+                        {employee.profilePhoto?.url ? (
+                          <img src={employee.profilePhoto.url} alt="" />
+                        ) : (
+                          <span>{initials(employee.fullName)}</span>
+                        )}
+                        <i className={employee.employmentStatus === "Active" ? "active" : ""} />
+                      </div>
+                      <div className="employee-primary">
+                        <span>{employee.employeeCode || "Code pending"}</span>
+                        <strong>{employee.fullName}</strong>
+                        <p>{employee.designation || "Designation pending"} · {employee.department || "Department pending"}</p>
+                      </div>
+                      <div className="employee-office">
+                        <Building2 size={15} />
+                        <span><strong>{employee.office?.code || "—"}</strong>{employee.office?.city || "No office"}</span>
+                      </div>
+                      <div className="employee-verification">
+                        <span className={documentCount >= 3 ? "verified" : ""}>
+                          {documentCount >= 3 ? <CheckCircle2 size={14} /> : <Clock3 size={14} />}
+                          {documentCount >= 3 ? "Identity ready" : `${documentCount}/3 identity files`}
+                        </span>
+                        <small>{employee.cnic || "CNIC pending"}</small>
+                      </div>
+                      <span className={`status-chip ${employee.employmentStatus?.toLowerCase().replace(/\s/g, "-")}`}>
+                        {employee.employmentStatus}
+                      </span>
+                      <ChevronRight size={18} />
+                    </article>
+                  );
+                })
+              ) : (
+                <EmptyState
+                  icon={UsersRound}
+                  title="No employee records found"
+                  text={search ? "Try a different name, ID, office, or status." : "Add an employee to begin the digital directory."}
+                  action="Add employee"
+                  onAction={() => openEmployeeForm()}
+                />
+              )}
+            </div>
+
+            {selectedEmployeeId && (
+              <aside className="employee-profile">
                 <button
                   type="button"
-                  onClick={() => openEmployeeForm(selectedEmployee)}
-                  aria-label="Edit employee"
-                >
-                  <Pencil size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedEmployeeId("")}
+                  className="profile-close"
+                  onClick={() => {
+                    setSelectedEmployeeId("");
+                    setSelectedEmployee(null);
+                  }}
                   aria-label="Close employee profile"
                 >
                   <X size={18} />
                 </button>
-              </div>
-            </div>
-
-            <div className="pa-profile-identity">
-              <span className="pa-profile-avatar" aria-hidden="true">
-                {getInitials(selectedEmployee.fullName)}
-              </span>
-              <div>
-                <p><BadgeCheck size={14} /> Verified record</p>
-                <h2 id="employee-profile-title">{selectedEmployee.fullName}</h2>
-                <span>Added {formatDate(selectedEmployee.createdAt)}</span>
-              </div>
-            </div>
-
-            <dl className="pa-profile-facts">
-              <div>
-                <dt><Phone size={15} /> Phone</dt>
-                <dd><a href={`tel:${selectedEmployee.phone}`}>{selectedEmployee.phone}</a></dd>
-              </div>
-              <div>
-                <dt><Mail size={15} /> Email</dt>
-                <dd><a href={`mailto:${selectedEmployee.email}`}>{selectedEmployee.email}</a></dd>
-              </div>
-              <div>
-                <dt><IdCard size={15} /> CNIC</dt>
-                <dd><code>{selectedEmployee.cnic}</code></dd>
-              </div>
-              <div className="wide">
-                <dt><MapPin size={15} /> Residential address</dt>
-                <dd>{selectedEmployee.currentAddress}</dd>
-              </div>
-            </dl>
-
-            <div className="pa-proof-card">
-              <span aria-hidden="true"><FileCheck2 size={20} /></span>
-              <div>
-                <strong>Electricity bill proof</strong>
-                <p>
-                  {selectedEmployee.billProofUrl
-                    ? "A supporting document is attached to this record."
-                    : "No supporting document has been attached yet."}
-                </p>
-              </div>
-              {selectedEmployee.billProofUrl && (
-                <a
-                  href={selectedEmployee.billProofUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View <ArrowUpRight size={14} />
-                </a>
-              )}
-            </div>
-
-            <section className="pa-equipment-section">
-              <div className="pa-section-heading">
-                <div>
-                  <span>Assigned company equipment</span>
-                  <h3>
-                    {selectedEmployeeAssets.length}{" "}
-                    {selectedEmployeeAssets.length === 1 ? "item" : "items"} in custody
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    openAssignForm({ employeeId: selectedEmployeeId })
-                  }
-                  disabled={!availableAssets.length}
-                  title={
-                    availableAssets.length
-                      ? "Assign available equipment"
-                      : "No equipment is currently available"
-                  }
-                >
-                  <Plus size={15} /> Assign
-                </button>
-              </div>
-
-              <div className="pa-equipment-list">
-                {selectedEmployeeAssets.length ? (
-                  selectedEmployeeAssets.map((asset) => {
-                    const AssetIcon = getAssetIcon(asset.itemType);
-                    return (
-                      <article key={getId(asset)}>
-                        <span className="pa-equipment-icon" aria-hidden="true">
-                          <AssetIcon size={18} />
-                        </span>
-                        <div>
-                          <strong>{asset.brandModel}</strong>
-                          <p>{asset.assetTag} · {asset.serialNumber}</p>
-                          <div>
-                            {specEntries(asset.specs)
-                              .slice(0, 3)
-                              .map(([label, value]) => (
-                                <span key={label}>{value}</span>
-                              ))}
-                          </div>
-                        </div>
+                {detailLoading || !selectedEmployee ? (
+                  <div className="profile-loading"><RefreshCw className="spin" size={20} /> Loading profile…</div>
+                ) : (
+                  <>
+                    <div className="profile-identity">
+                      <div className="profile-photo">
+                        {selectedEmployee.profilePhoto?.url ? (
+                          <img src={selectedEmployee.profilePhoto.url} alt={selectedEmployee.fullName} />
+                        ) : (
+                          <span>{initials(selectedEmployee.fullName)}</span>
+                        )}
+                      </div>
+                      <p>{selectedEmployee.employeeCode}</p>
+                      <h2>{selectedEmployee.fullName}</h2>
+                      <span>{selectedEmployee.designation} · {selectedEmployee.department}</span>
+                      <div>
+                        <button type="button" onClick={() => openEmployeeForm(selectedEmployee)}>
+                          <Pencil size={14} /> Edit
+                        </button>
                         <button
                           type="button"
-                          onClick={() => unassignAsset(asset)}
-                          disabled={saving}
-                          aria-label={`Return ${asset.assetTag}`}
-                          title="Return to inventory"
+                          onClick={() => {
+                            setTransferDraft({
+                              targetType: "employee",
+                              targetId: getId(selectedEmployee),
+                              officeId: "",
+                              reason: "",
+                            });
+                            setModal({ type: "transfer" });
+                          }}
                         >
-                          <Undo2 size={16} />
+                          <MapPin size={14} /> Transfer
                         </button>
-                      </article>
-                    );
-                  })
-                ) : (
-                  <div className="pa-equipment-empty">
-                    <PackageCheck size={22} />
-                    <strong>No equipment assigned</strong>
-                    <p>This employee currently has no company assets in custody.</p>
-                  </div>
+                        {isCEO && (
+                          <button
+                            type="button"
+                            className="danger"
+                            aria-label={`Delete ${selectedEmployee.fullName}`}
+                            onClick={() => deleteRecord("employee", getId(selectedEmployee))}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="profile-contact-grid">
+                      <span><Building2 size={15} /><small>Office</small><strong>{selectedEmployee.office?.name || "—"}</strong></span>
+                      <span><CalendarDays size={15} /><small>Joined</small><strong>{formatDate(selectedEmployee.joiningDate)}</strong></span>
+                      <span><Phone size={15} /><small>Phone</small><strong>{selectedEmployee.phone || "—"}</strong></span>
+                      <span><Mail size={15} /><small>Email</small><strong>{selectedEmployee.email || "—"}</strong></span>
+                    </div>
+
+                    <section className="profile-section">
+                      <div className="profile-section-head">
+                        <div><small>Private identity</small><h3>Verified documents</h3></div>
+                        <span><ShieldCheck size={14} /> Access logged</span>
+                      </div>
+                      <div className="document-list">
+                        {[
+                          ["cnicFront", "CNIC front", IdCard],
+                          ["cnicBack", "CNIC back", IdCard],
+                          ["contractDocument", "Employment contract", FileText],
+                          ["billProof", "Address proof", FileCheck2],
+                        ].map(([type, label, Icon]) => (
+                          <button
+                            type="button"
+                            key={type}
+                            disabled={!selectedEmployee[type]?.available}
+                            onClick={() => accessDocument(type)}
+                          >
+                            <Icon size={17} />
+                            <span><strong>{label}</strong><small>{selectedEmployee[type]?.available ? "Verified file" : "Not uploaded"}</small></span>
+                            {selectedEmployee[type]?.available ? <ArrowRight size={15} /> : <Clock3 size={15} />}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section className="profile-section">
+                      <div className="profile-section-head">
+                        <div><small>Company property</small><h3>Current equipment</h3></div>
+                        <button
+                          type="button"
+                          className="mini-action"
+                          disabled={!availableAssets.length}
+                          onClick={() => {
+                            setAssignmentDraft({
+                              employeeId: getId(selectedEmployee),
+                              assetId: "",
+                              issueCondition: "Good",
+                              issueNotes: "",
+                            });
+                            setModal({ type: "assignment" });
+                          }}
+                        >
+                          <Plus size={14} /> Assign
+                        </button>
+                      </div>
+                      <div className="profile-assets">
+                        {(selectedEmployee.currentAssets || []).length ? (
+                          selectedEmployee.currentAssets.map((asset) => {
+                            const Icon = assetIcon(asset.itemType);
+                            return (
+                              <article key={getId(asset)}>
+                                <span><Icon size={17} /></span>
+                                <div><strong>{asset.brandModel}</strong><small>{asset.assetTag} · {asset.conditionStatus}</small></div>
+                                <button type="button" onClick={() => returnAsset(asset)} title="Return asset"><Undo2 size={15} /></button>
+                              </article>
+                            );
+                          })
+                        ) : (
+                          <p className="profile-empty">No company property currently assigned.</p>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="profile-section timeline-section">
+                      <div className="profile-section-head">
+                        <div><small>Permanent audit trail</small><h3>Recent activity</h3></div>
+                      </div>
+                      <div className="profile-timeline">
+                        {(selectedEmployee.activityHistory || []).slice().reverse().slice(0, 8).map((activity) => (
+                          <article key={activity._id}>
+                            <i />
+                            <div><strong>{activity.label}</strong><small>{formatDate(activity.occurredAt)}</small></div>
+                          </article>
+                        ))}
+                        {!selectedEmployee.activityHistory?.length && <p className="profile-empty">No recorded activity yet.</p>}
+                      </div>
+                    </section>
+                  </>
                 )}
-              </div>
-            </section>
-          </aside>
-        </>
-      )}
+              </aside>
+            )}
+          </div>
+        )}
+
+        {activeView === "offices" && (
+          <div className="office-grid">
+            {filteredOffices.length ? (
+              filteredOffices.map((office) => (
+                <article className="office-card" key={getId(office)}>
+                  <div className="office-card-top">
+                    <span><Building2 size={21} /></span>
+                    <i className={office.status === "Active" ? "active" : ""}>{office.status}</i>
+                  </div>
+                  <p>{office.code}</p>
+                  <h2>{office.name}</h2>
+                  <span className="office-city"><MapPin size={14} /> {office.city}</span>
+                  <p className="office-address">{office.address}</p>
+                  <div className="office-counts">
+                    <span><strong>{office.employeeCount || 0}</strong><small>Employees</small></span>
+                    <span><strong>{office.assetCount || 0}</strong><small>Assets</small></span>
+                  </div>
+                  <div className="office-manager">
+                    <UserRound size={15} />
+                    <span><small>Office manager</small><strong>{office.managerName || "Not assigned"}</strong></span>
+                  </div>
+                  <footer>
+                    <button type="button" onClick={() => openOfficeForm(office)}><Pencil size={14} /> Edit office</button>
+                    {isCEO && (
+                      <button type="button" className="danger" aria-label={`Delete ${office.name}`} onClick={() => deleteRecord("office", getId(office))}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </footer>
+                </article>
+              ))
+            ) : (
+              <EmptyState icon={Building2} title="No offices found" text="Create a city office to organize employees and inventory." action="Add office" onAction={() => openOfficeForm()} />
+            )}
+          </div>
+        )}
+
+        {activeView === "assets" && (
+          <div className="asset-grid">
+            {filteredAssets.length ? (
+              filteredAssets.map((asset) => {
+                const Icon = assetIcon(asset.itemType);
+                const issueCount = issues.filter((issue) => getId(issue.asset) === getId(asset) && isOpenIssue(issue)).length;
+                return (
+                  <article className="asset-card" key={getId(asset)}>
+                    <div className="asset-card-head">
+                      <span><Icon size={21} /></span>
+                      <div><small>{asset.itemType}</small><strong>{asset.assetTag}</strong></div>
+                      <i className={asset.assignmentStatus?.toLowerCase()}>{asset.assignmentStatus === "Unassigned" ? "Available" : asset.assignmentStatus}</i>
+                    </div>
+                    <h2>{asset.brandModel}</h2>
+                    <p>{asset.serialNumber || asset.bikeDetails?.registrationNumber || "No serial number"}</p>
+                    <div className="asset-facts">
+                      <span><Building2 size={14} /> {asset.office?.code || "No office"}</span>
+                      <span><ShieldCheck size={14} /> {asset.conditionStatus}</span>
+                      {asset.purchasePrice ? <span><FileText size={14} /> {money(asset.purchasePrice)}</span> : null}
+                      {asset.itemType === "Bike" && <span><Bike size={14} /> {asset.bikeDetails?.currentMileage || 0} km</span>}
+                    </div>
+                    {asset.assignedEmployee ? (
+                      <div className="asset-assignee">
+                        <span>{initials(asset.assignedEmployee.fullName)}</span>
+                        <div><small>In custody of</small><strong>{asset.assignedEmployee.fullName}</strong></div>
+                      </div>
+                    ) : (
+                      <div className="asset-assignee available"><PackageCheck size={17} /><div><small>Inventory status</small><strong>{asset.lifecycleStatus}</strong></div></div>
+                    )}
+                    <footer>
+                      <button type="button" onClick={() => openAssetForm(asset)}><Pencil size={14} /> Edit</button>
+                      <button type="button" onClick={() => {
+                        setIssueDraft({ ...EMPTY_ISSUE, assetId: getId(asset) });
+                        setModal({ type: "issue", id: "" });
+                      }}>
+                        <Wrench size={14} /> {issueCount ? `${issueCount} open` : "Report"}
+                      </button>
+                      {!asset.assignedEmployee && (
+                        <button type="button" onClick={() => {
+                          setTransferDraft({ targetType: "asset", targetId: getId(asset), officeId: "", reason: "" });
+                          setModal({ type: "transfer" });
+                        }} aria-label={`Transfer ${asset.assetTag}`}><MapPin size={14} /></button>
+                      )}
+                      {isCEO && !asset.assignedEmployee && (
+                        <button type="button" className="danger" aria-label={`Delete ${asset.assetTag}`} onClick={() => deleteRecord("asset", getId(asset))}><Trash2 size={14} /></button>
+                      )}
+                    </footer>
+                  </article>
+                );
+              })
+            ) : (
+              <EmptyState icon={PackageCheck} title="No assets found" text="Register laptops, bikes, tablets, or other company property." action="Register asset" onAction={() => openAssetForm()} />
+            )}
+          </div>
+        )}
+
+        {activeView === "issues" && (
+          <div className="issue-list">
+            {filteredIssues.length ? (
+              filteredIssues.map((issue) => (
+                <article className="issue-row" key={getId(issue)}>
+                  <span className={`issue-severity ${issue.severity?.toLowerCase()}`}><AlertTriangle size={17} /></span>
+                  <div className="issue-main">
+                    <p>{issue.type} · {issue.asset?.assetTag}</p>
+                    <strong>{issue.title}</strong>
+                    <span>{issue.description || "No additional description"}</span>
+                  </div>
+                  <div className="issue-office"><Building2 size={14} /><span><strong>{issue.office?.code || "—"}</strong>{issue.office?.city || "Unknown office"}</span></div>
+                  <div className="issue-cost"><small>Recorded cost</small><strong>{money(issue.cost)}</strong></div>
+                  <span className={`issue-status ${issue.status?.toLowerCase().replace(/\s/g, "-")}`}>{issue.status}</span>
+                  <div className="issue-actions">
+                    <button type="button" aria-label={`Edit ${issue.title}`} onClick={() => openIssueForm(issue)}><Pencil size={15} /></button>
+                    {isCEO && <button type="button" className="danger" aria-label={`Delete ${issue.title}`} onClick={() => deleteRecord("issue", getId(issue))}><Trash2 size={15} /></button>}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <EmptyState icon={Wrench} title="No issue records found" text="Report repairs, accidents, fines, claims, or maintenance expenses." action="Report issue" onAction={() => openIssueForm()} />
+            )}
+          </div>
+        )}
+      </section>
 
       {modal?.type === "employee" && (
-        <div className="pa-modal-layer" role="presentation" onMouseDown={closeModal}>
-          <section
-            className="pa-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="employee-form-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="pa-modal-head">
-              <div>
-                <span><UserRound size={14} /> Employee record</span>
-                <h2 id="employee-form-title">
-                  {modal.id ? "Update employee" : "Add a new employee"}
-                </h2>
-                <p>Personal details are only visible to authorized managers.</p>
-              </div>
-              <button type="button" onClick={closeModal} aria-label="Close form">
-                <X size={19} />
-              </button>
-            </div>
-            <form onSubmit={saveEmployee}>
-              <div className="pa-form-grid">
-                <label className="wide">
-                  <span>Full name *</span>
-                  <input
-                    required
-                    autoFocus
-                    value={employeeDraft.fullName}
-                    onChange={(event) =>
-                      setEmployeeDraft((current) => ({
-                        ...current,
-                        fullName: event.target.value,
-                      }))
-                    }
-                    placeholder="e.g. Hasham Tahir"
-                  />
-                </label>
-                <label>
-                  <span>Phone number *</span>
-                  <input
-                    required
-                    value={employeeDraft.phone}
-                    onChange={(event) =>
-                      setEmployeeDraft((current) => ({
-                        ...current,
-                        phone: event.target.value,
-                      }))
-                    }
-                    placeholder="0300-1234567"
-                  />
-                </label>
-                <label>
-                  <span>Email address *</span>
-                  <input
-                    required
-                    type="email"
-                    value={employeeDraft.email}
-                    onChange={(event) =>
-                      setEmployeeDraft((current) => ({
-                        ...current,
-                        email: event.target.value,
-                      }))
-                    }
-                    placeholder="name@company.com"
-                  />
-                </label>
-                <label className="wide">
-                  <span>CNIC number *</span>
-                  <input
-                    required
-                    inputMode="numeric"
-                    value={employeeDraft.cnic}
-                    onChange={(event) =>
-                      setEmployeeDraft((current) => ({
-                        ...current,
-                        cnic: formatCnicInput(event.target.value),
-                      }))
-                    }
-                    placeholder="35201-1234567-1"
-                    maxLength={15}
-                  />
-                  <small>13 digits; dashes are added automatically.</small>
-                </label>
-                <label className="wide">
-                  <span>Current residential address *</span>
-                  <textarea
-                    required
-                    rows={3}
-                    value={employeeDraft.currentAddress}
-                    onChange={(event) =>
-                      setEmployeeDraft((current) => ({
-                        ...current,
-                        currentAddress: event.target.value,
-                      }))
-                    }
-                    placeholder="House, street, area, city"
-                  />
-                </label>
-                <label className="wide pa-file-field">
-                  <span>Electricity bill proof</span>
-                  <input
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.webp,.pdf"
-                    onChange={(event) =>
-                      setBillProofFile(event.target.files?.[0] || null)
-                    }
-                  />
-                  <span className="pa-file-box">
-                    <FileCheck2 size={19} />
-                    <span>
-                      <strong>
-                        {billProofFile?.name ||
-                          (employeeDraft.billProofUrl
-                            ? "Supporting document already attached"
-                            : "Choose an image or PDF")}
-                      </strong>
-                      <small>JPG, PNG, WebP or PDF · up to 8 MB</small>
+        <ModalLayer close={closeModal} wide>
+          <div className="onboarding-head">
+            <div><p><UserRound size={14} /> Employee onboarding</p><h2>{modal.id ? "Update employee profile" : "Create a verified employee record"}</h2></div>
+            <button type="button" onClick={closeModal}><X size={19} /></button>
+          </div>
+          <div className="onboarding-stepper">
+            {STEPS.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <button
+                  type="button"
+                  key={step.title}
+                  className={`${employeeStep === index ? "active" : ""} ${employeeStep > index ? "complete" : ""}`}
+                  onClick={() => index < employeeStep && setEmployeeStep(index)}
+                >
+                  <span>{employeeStep > index ? <Check size={16} /> : <Icon size={16} />}</span>
+                  <div><small>Step {index + 1}</small><strong>{step.title}</strong><p>{step.hint}</p></div>
+                </button>
+              );
+            })}
+          </div>
+          <form className="onboarding-form" onSubmit={employeeSubmit}>
+            {employeeStep === 0 && (
+              <div className="form-stage">
+                <div className="stage-copy"><span>01</span><div><h3>Identity &amp; contact</h3><p>Create a recognizable, searchable employee identity.</p></div></div>
+                <div className="identity-form-layout">
+                  <label className="photo-upload">
+                    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      setEmployeeFiles((current) => ({ ...current, profilePhoto: file }));
+                      if (photoPreview?.startsWith("blob:")) URL.revokeObjectURL(photoPreview);
+                      if (file) setPhotoPreview(URL.createObjectURL(file));
+                    }} />
+                    <span className="photo-preview">
+                      {photoPreview ? <img src={photoPreview} alt="Employee preview" /> : <Camera size={25} />}
                     </span>
-                  </span>
-                </label>
-                <label className="wide">
-                  <span>Or paste a proof URL</span>
-                  <input
-                    type="url"
-                    value={employeeDraft.billProofUrl}
-                    onChange={(event) =>
-                      setEmployeeDraft((current) => ({
-                        ...current,
-                        billProofUrl: event.target.value,
-                      }))
-                    }
-                    placeholder="https://drive.google.com/…"
-                  />
-                </label>
+                    <strong>Profile photograph *</strong>
+                    <small>Required before activation</small>
+                  </label>
+                  <div className="registry-form-grid">
+                    <Field label="Full name *" wide><input required autoFocus value={employeeDraft.fullName} onChange={(e) => setEmployeeDraft((c) => ({ ...c, fullName: e.target.value }))} placeholder="Employee’s legal name" /></Field>
+                    <Field label="CNIC number *"><input required value={employeeDraft.cnic} onChange={(e) => setEmployeeDraft((c) => ({ ...c, cnic: formatCnicInput(e.target.value) }))} placeholder="35201-1234567-1" maxLength={15} /></Field>
+                    <Field label="Phone number *"><input required value={employeeDraft.phone} onChange={(e) => setEmployeeDraft((c) => ({ ...c, phone: e.target.value }))} placeholder="0300-1234567" /></Field>
+                    <Field label="Email address *"><input required type="email" value={employeeDraft.email} onChange={(e) => setEmployeeDraft((c) => ({ ...c, email: e.target.value }))} placeholder="name@neesmedical.com" /></Field>
+                    <Field label="Residential address *" wide><textarea required rows={3} value={employeeDraft.currentAddress} onChange={(e) => setEmployeeDraft((c) => ({ ...c, currentAddress: e.target.value }))} placeholder="House, street, area, city" /></Field>
+                    <div className="form-divider wide"><span>Emergency contact</span><small>Who should the company call first?</small></div>
+                    <Field label="Contact name *"><input required value={employeeDraft.emergencyContact.name} onChange={(e) => setEmployeeDraft((c) => ({ ...c, emergencyContact: { ...c.emergencyContact, name: e.target.value } }))} /></Field>
+                    <Field label="Relationship"><input value={employeeDraft.emergencyContact.relationship} onChange={(e) => setEmployeeDraft((c) => ({ ...c, emergencyContact: { ...c.emergencyContact, relationship: e.target.value } }))} placeholder="Parent, sibling, spouse" /></Field>
+                    <Field label="Emergency phone *" wide><input required value={employeeDraft.emergencyContact.phone} onChange={(e) => setEmployeeDraft((c) => ({ ...c, emergencyContact: { ...c.emergencyContact, phone: e.target.value } }))} /></Field>
+                  </div>
+                </div>
               </div>
-              <div className="pa-form-footer">
-                <button type="button" className="pa-button secondary" onClick={closeModal}>
-                  Cancel
-                </button>
-                <button type="submit" className="pa-button primary" disabled={saving}>
-                  {saving ? "Saving…" : modal.id ? "Save changes" : "Add employee"}
-                </button>
+            )}
+
+            {employeeStep === 1 && (
+              <div className="form-stage">
+                <div className="stage-copy"><span>02</span><div><h3>Employment placement</h3><p>Place the employee in the correct city, team, and role.</p></div></div>
+                <div className="registry-form-grid">
+                  <Field label="Assigned office *" wide>
+                    <select required value={employeeDraft.office} onChange={(e) => setEmployeeDraft((c) => ({ ...c, office: e.target.value }))}>
+                      <option value="">Choose office…</option>
+                      {offices.filter((office) => office.status === "Active").map((office) => <option key={getId(office)} value={getId(office)}>{office.code} · {office.name}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Department *"><input required value={employeeDraft.department} onChange={(e) => setEmployeeDraft((c) => ({ ...c, department: e.target.value }))} placeholder="Operations" /></Field>
+                  <Field label="Designation *"><input required value={employeeDraft.designation} onChange={(e) => setEmployeeDraft((c) => ({ ...c, designation: e.target.value }))} placeholder="Coordinator" /></Field>
+                  <Field label="Joining date *"><input required type="date" value={employeeDraft.joiningDate} onChange={(e) => setEmployeeDraft((c) => ({ ...c, joiningDate: e.target.value }))} /></Field>
+                  <Field label="Record status">
+                    <select value={employeeDraft.employmentStatus} onChange={(e) => setEmployeeDraft((c) => ({ ...c, employmentStatus: e.target.value }))}>
+                      {EMPLOYMENT_STATUSES.map((status) => <option key={status}>{status}</option>)}
+                    </select>
+                  </Field>
+                </div>
+                {selectedOffice && (
+                  <div className="selected-office-card"><Building2 size={19} /><div><small>{selectedOffice.code} · {selectedOffice.city}</small><strong>{selectedOffice.name}</strong><p>{selectedOffice.address}</p></div></div>
+                )}
               </div>
-            </form>
-          </section>
-        </div>
+            )}
+
+            {employeeStep === 2 && (
+              <div className="form-stage">
+                <div className="stage-copy"><span>03</span><div><h3>Private documents</h3><p>Identity files are protected and never shown in directory tables.</p></div></div>
+                <div className="document-upload-grid">
+                  <DocumentUpload label="CNIC front *" type="cnicFront" file={employeeFiles.cnicFront} ready={existingDocumentStatus.cnicFront} setFiles={setEmployeeFiles} />
+                  <DocumentUpload label="CNIC back *" type="cnicBack" file={employeeFiles.cnicBack} ready={existingDocumentStatus.cnicBack} setFiles={setEmployeeFiles} />
+                  <DocumentUpload label="Employment contract" type="contractDocument" file={employeeFiles.contractDocument} ready={existingDocumentStatus.contractDocument} setFiles={setEmployeeFiles} />
+                  <DocumentUpload label="Address proof" type="billProof" file={employeeFiles.billProof} ready={existingDocumentStatus.billProof} setFiles={setEmployeeFiles} />
+                  <DocumentUpload label="Supporting document" type="supportingDocument" file={employeeFiles.supportingDocument} ready={existingDocumentStatus.supportingDocuments > 0} setFiles={setEmployeeFiles} />
+                </div>
+                <div className="privacy-note"><ShieldCheck size={19} /><div><strong>Protected identity storage</strong><p>CNIC and contract files use authenticated Cloudinary storage. Every view or download is added to the employee activity trail.</p></div></div>
+              </div>
+            )}
+
+            {employeeStep === 3 && (
+              <div className="form-stage review-stage">
+                <div className="stage-copy"><span>04</span><div><h3>Review &amp; activate</h3><p>Confirm the employee identity before creating the permanent record.</p></div></div>
+                <div className="employee-review-card">
+                  <div className="review-person">
+                    <span>{photoPreview ? <img src={photoPreview} alt="" /> : initials(employeeDraft.fullName)}</span>
+                    <div><small>{selectedOffice?.code || "OFFICE"} · Employee ID generated on save</small><h3>{employeeDraft.fullName || "Employee name"}</h3><p>{employeeDraft.designation || "Designation"} · {employeeDraft.department || "Department"}</p></div>
+                    <i className={employeeDraft.employmentStatus === "Active" ? "active" : ""}>{employeeDraft.employmentStatus}</i>
+                  </div>
+                  <div className="review-facts">
+                    <span><IdCard size={15} /><small>CNIC</small><strong>{employeeDraft.cnic || "Missing"}</strong></span>
+                    <span><Building2 size={15} /><small>Office</small><strong>{selectedOffice?.name || "Missing"}</strong></span>
+                    <span><CalendarDays size={15} /><small>Joining</small><strong>{formatDate(employeeDraft.joiningDate)}</strong></span>
+                    <span><Phone size={15} /><small>Emergency</small><strong>{employeeDraft.emergencyContact.name || "Missing"}</strong></span>
+                  </div>
+                </div>
+                <div className="activation-checklist">
+                  {[
+                    ["Profile photograph", documentReady("profilePhoto")],
+                    ["CNIC front image", documentReady("cnicFront")],
+                    ["CNIC back image", documentReady("cnicBack")],
+                  ].map(([label, ready]) => <span className={ready ? "ready" : ""} key={label}>{ready ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}{label}</span>)}
+                </div>
+                {employeeDraft.employmentStatus === "Active" && !activationReady && (
+                  <div className="activation-warning"><AlertTriangle size={17} /> Active status requires the photograph and both CNIC images. Return to Documents or save as Draft.</div>
+                )}
+              </div>
+            )}
+
+            <footer className="onboarding-footer">
+              <button type="button" className="registry-button ghost dark" onClick={employeeStep ? () => setEmployeeStep((step) => step - 1) : closeModal}>
+                {employeeStep ? <ArrowLeft size={16} /> : null}{employeeStep ? "Previous" : "Cancel"}
+              </button>
+              <span>Step {employeeStep + 1} of {STEPS.length}</span>
+              <button type="submit" className="registry-button primary" disabled={saving || (employeeStep === 3 && employeeDraft.employmentStatus === "Active" && !activationReady)}>
+                {saving ? "Saving…" : employeeStep < 3 ? <>Continue <ArrowRight size={16} /></> : modal.id ? "Save employee" : employeeDraft.employmentStatus === "Draft" ? "Save draft" : "Activate employee"}
+              </button>
+            </footer>
+          </form>
+        </ModalLayer>
+      )}
+
+      {modal?.type === "office" && (
+        <ModalLayer close={closeModal}>
+          <ModalHead icon={Building2} eyebrow="Office directory" title={modal.id ? "Update office" : "Add a company office"} close={closeModal} />
+          <form className="simple-modal-form" onSubmit={saveOffice}>
+            <div className="registry-form-grid">
+              <Field label="Office name *" wide><input required autoFocus value={officeDraft.name} onChange={(e) => setOfficeDraft((c) => ({ ...c, name: e.target.value }))} placeholder="NEES Lahore Office" /></Field>
+              <Field label="Office code *"><input required value={officeDraft.code} onChange={(e) => setOfficeDraft((c) => ({ ...c, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) }))} placeholder="LHR" /></Field>
+              <Field label="City *"><input required value={officeDraft.city} onChange={(e) => setOfficeDraft((c) => ({ ...c, city: e.target.value }))} placeholder="Lahore" /></Field>
+              <Field label="Complete address *" wide><textarea required rows={3} value={officeDraft.address} onChange={(e) => setOfficeDraft((c) => ({ ...c, address: e.target.value }))} /></Field>
+              <Field label="Office manager"><input value={officeDraft.managerName} onChange={(e) => setOfficeDraft((c) => ({ ...c, managerName: e.target.value }))} /></Field>
+              <Field label="Contact number"><input value={officeDraft.phone} onChange={(e) => setOfficeDraft((c) => ({ ...c, phone: e.target.value }))} /></Field>
+              <Field label="Status" wide><select value={officeDraft.status} onChange={(e) => setOfficeDraft((c) => ({ ...c, status: e.target.value }))}><option>Active</option><option>Inactive</option></select></Field>
+            </div>
+            <ModalFooter close={closeModal} saving={saving} label={modal.id ? "Save office" : "Add office"} />
+          </form>
+        </ModalLayer>
       )}
 
       {modal?.type === "asset" && (
-        <div className="pa-modal-layer" role="presentation" onMouseDown={closeModal}>
-          <section
-            className="pa-modal asset-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="asset-form-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="pa-modal-head">
-              <div>
-                <span><BriefcaseBusiness size={14} /> Asset register</span>
-                <h2 id="asset-form-title">
-                  {modal.id ? "Update company asset" : "Register company asset"}
-                </h2>
-                <p>Record the identity, condition, and key technical details.</p>
-              </div>
-              <button type="button" onClick={closeModal} aria-label="Close form">
-                <X size={19} />
-              </button>
+        <ModalLayer close={closeModal} wide>
+          <ModalHead icon={PackageCheck} eyebrow="Company property" title={modal.id ? "Update asset record" : "Register a company asset"} close={closeModal} />
+          <form className="simple-modal-form asset-form" onSubmit={saveAsset}>
+            <div className="registry-form-grid">
+              <Field label="Asset tag *"><input required autoFocus value={assetDraft.assetTag} onChange={(e) => setAssetDraft((c) => ({ ...c, assetTag: e.target.value.toUpperCase() }))} placeholder="LHR-LAP-0012" /></Field>
+              <Field label="Category *"><select value={assetDraft.itemType} onChange={(e) => setAssetDraft((c) => ({ ...c, itemType: e.target.value }))}>{ITEM_TYPES.map((type) => <option key={type}>{type}</option>)}</select></Field>
+              <Field label="Brand & model *" wide><input required value={assetDraft.brandModel} onChange={(e) => setAssetDraft((c) => ({ ...c, brandModel: e.target.value }))} placeholder="Lenovo ThinkPad E14" /></Field>
+              <Field label="Serial number"><input value={assetDraft.serialNumber} onChange={(e) => setAssetDraft((c) => ({ ...c, serialNumber: e.target.value.toUpperCase() }))} /></Field>
+              <Field label="Owning office *"><select required value={assetDraft.office} onChange={(e) => setAssetDraft((c) => ({ ...c, office: e.target.value }))}><option value="">Choose office…</option>{offices.filter((office) => office.status === "Active").map((office) => <option key={getId(office)} value={getId(office)}>{office.code} · {office.name}</option>)}</select></Field>
+              <Field label="Condition"><select value={assetDraft.conditionStatus} onChange={(e) => setAssetDraft((c) => ({ ...c, conditionStatus: e.target.value }))}>{CONDITION_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></Field>
+              <Field label="Lifecycle stage"><select value={assetDraft.lifecycleStatus} onChange={(e) => setAssetDraft((c) => ({ ...c, lifecycleStatus: e.target.value }))}>{LIFECYCLE_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></Field>
+              <div className="form-divider wide"><span>Purchase &amp; location</span><small>Financial ownership and warranty details</small></div>
+              <Field label="Purchase date"><input type="date" value={assetDraft.purchaseDate} onChange={(e) => setAssetDraft((c) => ({ ...c, purchaseDate: e.target.value }))} /></Field>
+              <Field label="Purchase price"><input type="number" min="0" value={assetDraft.purchasePrice} onChange={(e) => setAssetDraft((c) => ({ ...c, purchasePrice: e.target.value }))} placeholder="0" /></Field>
+              <Field label="Supplier"><input value={assetDraft.supplier} onChange={(e) => setAssetDraft((c) => ({ ...c, supplier: e.target.value }))} /></Field>
+              <Field label="Warranty expiry"><input type="date" value={assetDraft.warrantyExpiresAt} onChange={(e) => setAssetDraft((c) => ({ ...c, warrantyExpiresAt: e.target.value }))} /></Field>
+              <Field label="Current location" wide><input value={assetDraft.currentLocation} onChange={(e) => setAssetDraft((c) => ({ ...c, currentLocation: e.target.value }))} placeholder="Floor, room, or storage location" /></Field>
+              {assetDraft.itemType === "Bike" ? (
+                <>
+                  <div className="form-divider wide bike-divider"><span><Bike size={15} /> Bike identity &amp; service</span><small>Registration, insurance, mileage, and issued safety equipment</small></div>
+                  {[
+                    ["manufacturingYear", "Manufacturing year", "number"],
+                    ["registrationNumber", "Registration number *", "text"],
+                    ["engineNumber", "Engine number *", "text"],
+                    ["chassisNumber", "Chassis number *", "text"],
+                    ["color", "Colour", "text"],
+                    ["currentMileage", "Current mileage (km)", "number"],
+                  ].map(([key, label, type]) => <Field label={label} key={key}><input required={label.includes("*")} type={type} value={assetDraft.bikeDetails[key]} onChange={(e) => setAssetDraft((c) => ({ ...c, bikeDetails: { ...c.bikeDetails, [key]: e.target.value } }))} /></Field>)}
+                  <Field label="Fuel type"><select value={assetDraft.bikeDetails.fuelType} onChange={(e) => setAssetDraft((c) => ({ ...c, bikeDetails: { ...c.bikeDetails, fuelType: e.target.value } }))}><option>Petrol</option><option>Electric</option><option>Hybrid</option><option>Other</option></select></Field>
+                  <Field label="Insurance expiry"><input type="date" value={assetDraft.bikeDetails.insuranceExpiresAt} onChange={(e) => setAssetDraft((c) => ({ ...c, bikeDetails: { ...c.bikeDetails, insuranceExpiresAt: e.target.value } }))} /></Field>
+                  <Field label="Registration document"><input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setAssetFiles((c) => ({ ...c, registration: e.target.files?.[0] }))} /></Field>
+                  <Field label="Insurance document"><input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setAssetFiles((c) => ({ ...c, insurance: e.target.files?.[0] }))} /></Field>
+                  <Field label="Keys issued"><input type="number" min="0" value={assetDraft.bikeDetails.keysIssued} onChange={(e) => setAssetDraft((c) => ({ ...c, bikeDetails: { ...c.bikeDetails, keysIssued: e.target.value } }))} /></Field>
+                  <Field label="Helmet issued"><label className="checkbox-field"><input type="checkbox" checked={assetDraft.bikeDetails.helmetIssued} onChange={(e) => setAssetDraft((c) => ({ ...c, bikeDetails: { ...c.bikeDetails, helmetIssued: e.target.checked } }))} /><span>Company helmet included</span></label></Field>
+                  <Field label="Accessories" wide><input value={assetDraft.bikeDetails.accessoriesIssued} onChange={(e) => setAssetDraft((c) => ({ ...c, bikeDetails: { ...c.bikeDetails, accessoriesIssued: e.target.value } }))} placeholder="Helmet, lock, rain cover" /></Field>
+                  <Field label="Last service"><input type="date" value={assetDraft.bikeDetails.lastServiceDate} onChange={(e) => setAssetDraft((c) => ({ ...c, bikeDetails: { ...c.bikeDetails, lastServiceDate: e.target.value } }))} /></Field>
+                  <Field label="Next service date"><input type="date" value={assetDraft.bikeDetails.nextServiceDate} onChange={(e) => setAssetDraft((c) => ({ ...c, bikeDetails: { ...c.bikeDetails, nextServiceDate: e.target.value } }))} /></Field>
+                  <Field label="Next service mileage" wide><input type="number" min="0" value={assetDraft.bikeDetails.nextServiceMileage} onChange={(e) => setAssetDraft((c) => ({ ...c, bikeDetails: { ...c.bikeDetails, nextServiceMileage: e.target.value } }))} /></Field>
+                </>
+              ) : (
+                <>
+                  <div className="form-divider wide"><span>Technical details</span><small>Optional specifications for issuing and servicing</small></div>
+                  {[
+                    ["processor", "Processor"],
+                    ["ram", "Memory / RAM"],
+                    ["storage", "Storage"],
+                    ["operatingSystem", "Operating system"],
+                  ].map(([key, label]) => <Field label={label} key={key}><input value={assetDraft.specs[key]} onChange={(e) => setAssetDraft((c) => ({ ...c, specs: { ...c.specs, [key]: e.target.value } }))} /></Field>)}
+                  <Field label="Notes" wide><textarea rows={2} value={assetDraft.specs.notes} onChange={(e) => setAssetDraft((c) => ({ ...c, specs: { ...c.specs, notes: e.target.value } }))} /></Field>
+                </>
+              )}
+              <div className="form-divider wide"><span>Photographs &amp; invoice</span><small>Capture visual condition and proof of purchase</small></div>
+              <Field label="Asset photograph"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setAssetFiles((c) => ({ ...c, photo: e.target.files?.[0] }))} /></Field>
+              <Field label="Invoice / registration document"><input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setAssetFiles((c) => ({ ...c, invoice: e.target.files?.[0] }))} /></Field>
             </div>
-            <form onSubmit={saveAsset}>
-              <div className="pa-form-grid">
-                <label>
-                  <span>Asset tag *</span>
-                  <input
-                    required
-                    autoFocus
-                    value={assetDraft.assetTag}
-                    onChange={(event) =>
-                      setAssetDraft((current) => ({
-                        ...current,
-                        assetTag: event.target.value.toUpperCase(),
-                      }))
-                    }
-                    placeholder="AST-LAP-0012"
-                  />
-                </label>
-                <label>
-                  <span>Category *</span>
-                  <select
-                    value={assetDraft.itemType}
-                    onChange={(event) =>
-                      setAssetDraft((current) => ({
-                        ...current,
-                        itemType: event.target.value,
-                      }))
-                    }
-                  >
-                    {ITEM_TYPES.map((type) => <option key={type}>{type}</option>)}
-                  </select>
-                </label>
-                <label className="wide">
-                  <span>Brand &amp; model *</span>
-                  <input
-                    required
-                    value={assetDraft.brandModel}
-                    onChange={(event) =>
-                      setAssetDraft((current) => ({
-                        ...current,
-                        brandModel: event.target.value,
-                      }))
-                    }
-                    placeholder="Lenovo ThinkPad E14"
-                  />
-                </label>
-                <label>
-                  <span>Serial number *</span>
-                  <input
-                    required
-                    value={assetDraft.serialNumber}
-                    onChange={(event) =>
-                      setAssetDraft((current) => ({
-                        ...current,
-                        serialNumber: event.target.value.toUpperCase(),
-                      }))
-                    }
-                    placeholder="L3-XYZ987123"
-                  />
-                </label>
-                <label>
-                  <span>Condition *</span>
-                  <select
-                    value={assetDraft.conditionStatus}
-                    onChange={(event) =>
-                      setAssetDraft((current) => ({
-                        ...current,
-                        conditionStatus: event.target.value,
-                      }))
-                    }
-                  >
-                    {CONDITION_STATUSES.map((status) => <option key={status}>{status}</option>)}
-                  </select>
-                </label>
-                {modal.id && assetDraft.assignmentStatus !== "Assigned" && (
-                  <label className="wide">
-                    <span>Inventory status</span>
-                    <select
-                      value={assetDraft.assignmentStatus}
-                      onChange={(event) =>
-                        setAssetDraft((current) => ({
-                          ...current,
-                          assignmentStatus: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="Unassigned">Available</option>
-                      <option value="Retired">Retired</option>
-                    </select>
-                  </label>
-                )}
-                <div className="pa-form-divider wide">
-                  <span>Technical specifications</span>
-                  <small>Optional, but useful when issuing or servicing hardware.</small>
-                </div>
-                {[
-                  ["processor", "Processor", "Intel i7 12th Gen"],
-                  ["ram", "Memory / RAM", "16 GB"],
-                  ["storage", "Storage", "512 GB SSD"],
-                  ["operatingSystem", "Operating system", "Windows 11 Pro"],
-                ].map(([key, label, placeholder]) => (
-                  <label key={key}>
-                    <span>{label}</span>
-                    <input
-                      value={assetDraft.specs[key] || ""}
-                      onChange={(event) =>
-                        setAssetDraft((current) => ({
-                          ...current,
-                          specs: {
-                            ...current.specs,
-                            [key]: event.target.value,
-                          },
-                        }))
-                      }
-                      placeholder={placeholder}
-                    />
-                  </label>
-                ))}
-                <label className="wide">
-                  <span>Notes</span>
-                  <textarea
-                    rows={2}
-                    value={assetDraft.specs.notes || ""}
-                    onChange={(event) =>
-                      setAssetDraft((current) => ({
-                        ...current,
-                        specs: {
-                          ...current.specs,
-                          notes: event.target.value,
-                        },
-                      }))
-                    }
-                    placeholder="Charger, accessories, warranty, or service notes"
-                  />
-                </label>
-              </div>
-              <div className="pa-form-footer">
-                <button type="button" className="pa-button secondary" onClick={closeModal}>
-                  Cancel
-                </button>
-                <button type="submit" className="pa-button primary" disabled={saving}>
-                  {saving ? "Saving…" : modal.id ? "Save asset" : "Register asset"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
+            <ModalFooter close={closeModal} saving={saving} label={modal.id ? "Save asset" : "Register asset"} />
+          </form>
+        </ModalLayer>
+      )}
+
+      {modal?.type === "issue" && (
+        <ModalLayer close={closeModal}>
+          <ModalHead icon={Wrench} eyebrow="Lifecycle record" title={modal.id ? "Update issue or maintenance" : "Report an asset event"} close={closeModal} />
+          <form className="simple-modal-form" onSubmit={saveIssue}>
+            <div className="registry-form-grid">
+              <Field label="Asset *" wide><select required disabled={Boolean(modal.id)} value={issueDraft.assetId} onChange={(e) => setIssueDraft((c) => ({ ...c, assetId: e.target.value }))}><option value="">Choose asset…</option>{assets.map((asset) => <option key={getId(asset)} value={getId(asset)}>{asset.assetTag} · {asset.brandModel}</option>)}</select></Field>
+              <Field label="Record type"><select value={issueDraft.type} onChange={(e) => setIssueDraft((c) => ({ ...c, type: e.target.value }))}>{ISSUE_TYPES.map((type) => <option key={type}>{type}</option>)}</select></Field>
+              <Field label="Severity"><select value={issueDraft.severity} onChange={(e) => setIssueDraft((c) => ({ ...c, severity: e.target.value }))}>{["Low", "Medium", "High", "Critical"].map((severity) => <option key={severity}>{severity}</option>)}</select></Field>
+              <Field label="Title *" wide><input required autoFocus value={issueDraft.title} onChange={(e) => setIssueDraft((c) => ({ ...c, title: e.target.value }))} placeholder="Describe the issue briefly" /></Field>
+              <Field label="Description" wide><textarea rows={3} value={issueDraft.description} onChange={(e) => setIssueDraft((c) => ({ ...c, description: e.target.value }))} /></Field>
+              <Field label="Reported by employee"><select value={issueDraft.reportedByEmployeeId} onChange={(e) => setIssueDraft((c) => ({ ...c, reportedByEmployeeId: e.target.value }))}><option value="">Company / office report</option>{employees.map((employee) => <option key={getId(employee)} value={getId(employee)}>{employee.employeeCode} · {employee.fullName}</option>)}</select></Field>
+              <Field label="Status"><select value={issueDraft.status} onChange={(e) => setIssueDraft((c) => ({ ...c, status: e.target.value }))}>{["Reported", "In Progress", "Resolved", "Closed"].map((status) => <option key={status}>{status}</option>)}</select></Field>
+              <Field label="Vendor / workshop"><input value={issueDraft.vendor} onChange={(e) => setIssueDraft((c) => ({ ...c, vendor: e.target.value }))} /></Field>
+              <Field label="Expense"><input type="number" min="0" value={issueDraft.cost} onChange={(e) => setIssueDraft((c) => ({ ...c, cost: e.target.value }))} /></Field>
+              <Field label="Resolution" wide><textarea rows={2} value={issueDraft.resolution} onChange={(e) => setIssueDraft((c) => ({ ...c, resolution: e.target.value }))} /></Field>
+              <Field label="Next service date"><input type="date" value={issueDraft.nextServiceDate} onChange={(e) => setIssueDraft((c) => ({ ...c, nextServiceDate: e.target.value }))} /></Field>
+              <Field label="Next service mileage"><input type="number" min="0" value={issueDraft.nextServiceMileage} onChange={(e) => setIssueDraft((c) => ({ ...c, nextServiceMileage: e.target.value }))} /></Field>
+            </div>
+            <ModalFooter close={closeModal} saving={saving} label={modal.id ? "Save record" : "Add lifecycle record"} />
+          </form>
+        </ModalLayer>
       )}
 
       {modal?.type === "assignment" && (
-        <div className="pa-modal-layer" role="presentation" onMouseDown={closeModal}>
-          <section
-            className="pa-modal assignment-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="assignment-form-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="pa-modal-head">
-              <div>
-                <span><ClipboardCheck size={14} /> Chain of custody</span>
-                <h2 id="assignment-form-title">Issue company equipment</h2>
-                <p>This creates a dated assignment in the asset’s custody history.</p>
-              </div>
-              <button type="button" onClick={closeModal} aria-label="Close form">
-                <X size={19} />
-              </button>
+        <ModalLayer close={closeModal}>
+          <ModalHead icon={ClipboardCheck} eyebrow="Chain of custody" title="Issue company property" close={closeModal} />
+          <form className="simple-modal-form" onSubmit={saveAssignment}>
+            <div className="assignment-flow">
+              <Field label="Employee"><select required value={assignmentDraft.employeeId} onChange={(e) => setAssignmentDraft((c) => ({ ...c, employeeId: e.target.value }))}><option value="">Choose employee…</option>{employees.filter((employee) => employee.employmentStatus === "Active").map((employee) => <option key={getId(employee)} value={getId(employee)}>{employee.employeeCode} · {employee.fullName}</option>)}</select></Field>
+              <ChevronRight size={19} />
+              <Field label="Available asset"><select required value={assignmentDraft.assetId} onChange={(e) => setAssignmentDraft((c) => ({ ...c, assetId: e.target.value }))}><option value="">Choose asset…</option>{availableAssets.filter((asset) => !assignmentDraft.employeeId || getId(asset.office) === getId(employeeMap.get(assignmentDraft.employeeId)?.office)).map((asset) => <option key={getId(asset)} value={getId(asset)}>{asset.assetTag} · {asset.brandModel}</option>)}</select></Field>
             </div>
-            <form onSubmit={assignAsset}>
-              <div className="pa-assignment-steps">
-                <label>
-                  <span className="pa-step-number">1</span>
-                  <span className="pa-step-copy">
-                    <strong>Select employee</strong>
-                    <small>The person accepting responsibility for the asset.</small>
-                  </span>
-                  <select
-                    required
-                    value={assignmentDraft.employeeId}
-                    onChange={(event) =>
-                      setAssignmentDraft((current) => ({
-                        ...current,
-                        employeeId: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Choose employee…</option>
-                    {employees.map((employee) => (
-                      <option key={getId(employee)} value={getId(employee)}>
-                        {employee.fullName} · {employee.cnic}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <ChevronRight size={20} aria-hidden="true" />
-                <label>
-                  <span className="pa-step-number">2</span>
-                  <span className="pa-step-copy">
-                    <strong>Select available asset</strong>
-                    <small>Only unassigned equipment can be issued.</small>
-                  </span>
-                  <select
-                    required
-                    value={assignmentDraft.assetId}
-                    onChange={(event) =>
-                      setAssignmentDraft((current) => ({
-                        ...current,
-                        assetId: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Choose asset…</option>
-                    {availableAssets.map((asset) => (
-                      <option key={getId(asset)} value={getId(asset)}>
-                        {asset.assetTag} · {asset.brandModel}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              {!availableAssets.length && (
-                <div className="pa-inline-note">
-                  <CircleAlert size={16} />
-                  No assets are currently available. Return or register equipment first.
-                </div>
-              )}
-              <div className="pa-custody-note">
-                <Building2 size={18} />
-                <p>
-                  <strong>Custody starts today.</strong>
-                  The return date will be recorded when this item comes back into inventory.
-                </p>
-              </div>
-              <div className="pa-form-footer">
-                <button type="button" className="pa-button secondary" onClick={closeModal}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="pa-button primary"
-                  disabled={
-                    saving ||
-                    !availableAssets.length ||
-                    !assignmentDraft.employeeId ||
-                    !assignmentDraft.assetId
-                  }
-                >
-                  {saving ? "Assigning…" : "Confirm assignment"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
+            <div className="registry-form-grid">
+              <Field label="Condition when issued"><select value={assignmentDraft.issueCondition} onChange={(e) => setAssignmentDraft((c) => ({ ...c, issueCondition: e.target.value }))}>{CONDITION_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></Field>
+              <Field label="Accessories / issue notes"><input value={assignmentDraft.issueNotes} onChange={(e) => setAssignmentDraft((c) => ({ ...c, issueNotes: e.target.value }))} placeholder="Charger, keys, helmet…" /></Field>
+              <Field label="Issue condition photograph" wide><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setAssignmentPhoto(e.target.files?.[0] || null)} /></Field>
+            </div>
+            <div className="privacy-note"><Camera size={18} /><div><strong>Condition evidence</strong><p>The selected photograph is stored in the permanent custody history with the issue condition and notes.</p></div></div>
+            <ModalFooter close={closeModal} saving={saving} label="Confirm assignment" />
+          </form>
+        </ModalLayer>
+      )}
+
+      {modal?.type === "return" && (
+        <ModalLayer close={closeModal}>
+          <ModalHead icon={Undo2} eyebrow="Return evidence" title={`Return ${returnDraft.asset?.assetTag || "company asset"}`} close={closeModal} />
+          <form className="simple-modal-form" onSubmit={saveReturn}>
+            <div className="registry-form-grid">
+              <Field label="Condition when returned" wide><select value={returnDraft.returnCondition} onChange={(e) => setReturnDraft((c) => ({ ...c, returnCondition: e.target.value }))}>{CONDITION_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></Field>
+              <Field label="Return notes" wide><textarea rows={3} value={returnDraft.returnNotes} onChange={(e) => setReturnDraft((c) => ({ ...c, returnNotes: e.target.value }))} placeholder="Accessories returned, damage observed, or handover notes" /></Field>
+              <Field label="Return condition photograph" wide><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setReturnPhoto(e.target.files?.[0] || null)} /></Field>
+            </div>
+            <div className="privacy-note"><Camera size={18} /><div><strong>Return evidence</strong><p>The condition, notes, and photograph remain attached to the asset assignment history.</p></div></div>
+            <ModalFooter close={closeModal} saving={saving} label="Confirm return" />
+          </form>
+        </ModalLayer>
+      )}
+
+      {modal?.type === "transfer" && (
+        <ModalLayer close={closeModal}>
+          <ModalHead icon={MapPin} eyebrow="Office history" title={`Transfer ${transferDraft.targetType} to another office`} close={closeModal} />
+          <form className="simple-modal-form" onSubmit={saveTransfer}>
+            <div className="registry-form-grid">
+              <Field label="Destination office *" wide><select required value={transferDraft.officeId} onChange={(e) => setTransferDraft((c) => ({ ...c, officeId: e.target.value }))}><option value="">Choose office…</option>{offices.filter((office) => office.status === "Active").map((office) => <option value={getId(office)} key={getId(office)}>{office.code} · {office.name}</option>)}</select></Field>
+              <Field label="Transfer reason *" wide><textarea required rows={3} value={transferDraft.reason} onChange={(e) => setTransferDraft((c) => ({ ...c, reason: e.target.value }))} placeholder="Reason for the office transfer" /></Field>
+            </div>
+            <div className="privacy-note"><Clock3 size={18} /><div><strong>History is preserved</strong><p>The previous office remains in the permanent transfer timeline.</p></div></div>
+            <ModalFooter close={closeModal} saving={saving} label="Confirm transfer" />
+          </form>
+        </ModalLayer>
       )}
     </div>
   );
 };
+
+const Field = ({ label, wide = false, children }) => (
+  <label className={wide ? "wide" : ""}>
+    <span>{label}</span>
+    {children}
+  </label>
+);
+
+const DocumentUpload = ({ label, type, file, ready, setFiles }) => (
+  <label className={`document-upload ${file || ready ? "ready" : ""}`}>
+    <input
+      type="file"
+      accept="image/jpeg,image/png,image/webp,application/pdf"
+      onChange={(event) =>
+        setFiles((current) => ({ ...current, [type]: event.target.files?.[0] }))
+      }
+    />
+    <span>{file || ready ? <CheckCircle2 size={20} /> : <FileText size={20} />}</span>
+    <div>
+      <strong>{label}</strong>
+      <small>{file?.name || (ready ? "Protected file already uploaded" : "Choose JPG, PNG, WebP, or PDF")}</small>
+    </div>
+    <i>{file ? "Selected" : ready ? "Verified" : "Upload"}</i>
+  </label>
+);
+
+const EmptyState = ({ icon: Icon, title, text, action, onAction }) => (
+  <div className="registry-empty">
+    <span><Icon size={26} /></span>
+    <h2>{title}</h2>
+    <p>{text}</p>
+    <button type="button" onClick={onAction}><Plus size={15} /> {action}</button>
+  </div>
+);
+
+const ModalLayer = ({ children, close, wide = false }) => (
+  <div className="registry-modal-layer" role="presentation" onMouseDown={close}>
+    <section
+      className={`registry-modal ${wide ? "wide-modal" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      {children}
+    </section>
+  </div>
+);
+
+const ModalHead = ({ icon: Icon, eyebrow, title, close }) => (
+  <div className="registry-modal-head">
+    <span><Icon size={20} /></span>
+    <div><p>{eyebrow}</p><h2>{title}</h2></div>
+    <button type="button" onClick={close}><X size={19} /></button>
+  </div>
+);
+
+const ModalFooter = ({ close, saving, label }) => (
+  <footer className="modal-footer">
+    <button type="button" className="registry-button ghost dark" onClick={close}>Cancel</button>
+    <button type="submit" className="registry-button primary" disabled={saving}>{saving ? "Saving…" : label}</button>
+  </footer>
+);
 
 export default PeopleAssets;

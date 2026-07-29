@@ -14,6 +14,7 @@ import {
   Gauge,
   Image as ImageIcon,
   LayoutDashboard,
+  LockKeyhole,
   LogOut,
   MapPinned,
   Menu,
@@ -21,6 +22,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
+  ReceiptText,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
@@ -705,6 +707,7 @@ const AdminDashboard = () => {
       items: [
         { label: "Overview", hint: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, show: true },
         { label: "Orders", hint: "Fulfillment", path: "/admin/orders", icon: ShoppingBag, show: true },
+        { label: "Office expenses", hint: "Spend & reimbursements", path: "/admin/expenses", icon: ReceiptText, show: true },
         { label: "Customer leads", hint: "Contact inbox", path: "/admin/contact-us", icon: ContactRound, show: canAccessRestrictedSections() },
       ],
     },
@@ -735,6 +738,7 @@ const AdminDashboard = () => {
         { label: "Staff", hint: "Roles & access", path: "/admin/staff", icon: UserRoundCog, show: canAccessStaffManagement() },
         { label: "Customers", hint: "Accounts", path: "/admin/users", icon: Users, show: canViewCustomers() },
         { label: "Image manager", hint: "Cloud assets", path: "/admin/cloudinary", icon: ImageIcon, show: true },
+        { label: "Delete PIN", hint: "CEO security", path: "/admin/security/delete-pin", icon: LockKeyhole, show: adminData?.role === "CEO" },
       ],
     },
   ];
