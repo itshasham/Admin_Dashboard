@@ -30,6 +30,7 @@ import {
   TrendingDown,
   TrendingUp,
   UserRoundCog,
+  UsersRound,
   Users,
   WalletCards,
   Wrench,
@@ -730,6 +731,7 @@ const AdminDashboard = () => {
     {
       label: "Administration",
       items: [
+        { label: "People & equipment", hint: "Custody records", path: "/admin/people-assets", icon: UsersRound, show: canAccessRestrictedSections() },
         { label: "Staff", hint: "Roles & access", path: "/admin/staff", icon: UserRoundCog, show: canAccessStaffManagement() },
         { label: "Customers", hint: "Accounts", path: "/admin/users", icon: Users, show: canViewCustomers() },
         { label: "Image manager", hint: "Cloud assets", path: "/admin/cloudinary", icon: ImageIcon, show: true },

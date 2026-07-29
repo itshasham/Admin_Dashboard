@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
-import { BookOpenText, LayoutDashboard, LogOut, MessageCircle, Package, ShoppingBag, Stethoscope } from "lucide-react";
+import { BookOpenText, LayoutDashboard, LogOut, MessageCircle, Package, ShoppingBag, Stethoscope, UsersRound } from "lucide-react";
 
 // Lazy-loaded pages to reduce initial bundle
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
@@ -44,6 +44,7 @@ const CouponForm = lazy(() => import("./pages/coupons/CouponForm"));
 const CloudinaryPage = lazy(() => import("./pages/cloudinary/CloudinaryPage"));
 const ContactUsList = lazy(() => import("./pages/contacts/ContactUsList"));
 const GoogleMapLinkList = lazy(() => import("./pages/google-map-links/GoogleMapLinkList"));
+const PeopleAssets = lazy(() => import("./pages/people-assets/PeopleAssets"));
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -103,6 +104,7 @@ const AdminGlobalNavigation = () => {
     { label: "Orders", path: "/admin/orders", icon: ShoppingBag },
     { label: "Retail", path: "/admin/products", icon: Package },
     { label: "Clinical", path: "/admin/clinical-products", icon: Stethoscope },
+    { label: "People", path: "/admin/people-assets", icon: UsersRound },
     { label: "Content", path: "/admin/blogs", icon: BookOpenText },
     { label: "WhatsApp", path: "/admin/whatsapp", icon: MessageCircle },
   ];
@@ -238,6 +240,10 @@ const App = () => {
 
           {/* User Management (protected) */}
           <Route path="/admin/users" element={<ProtectedRoute><UserList /></ProtectedRoute>} />
+          <Route
+            path="/admin/people-assets"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><PeopleAssets /></ProtectedRoute>}
+          />
           <Route
             path="/admin/whatsapp"
             element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><WhatsAppCampaign /></ProtectedRoute>}
