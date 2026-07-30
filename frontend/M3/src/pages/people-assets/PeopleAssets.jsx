@@ -225,6 +225,15 @@ const assetIcon = (type) => {
   return Box;
 };
 const isOpenIssue = (issue) => ["Reported", "In Progress"].includes(issue.status);
+const latestDocumentUrl = (documents) => {
+  if (!Array.isArray(documents)) return "";
+
+  for (let index = documents.length - 1; index >= 0; index -= 1) {
+    if (documents[index]?.url) return documents[index].url;
+  }
+
+  return "";
+};
 
 const PeopleAssets = () => {
   const role = currentRole();
@@ -1474,6 +1483,7 @@ const PeopleAssets = () => {
               filteredAssets.map((asset) => {
                 const Icon = assetIcon(asset.itemType);
                 const issueCount = issues.filter((issue) => getId(issue.asset) === getId(asset) && isOpenIssue(issue)).length;
+                const photographUrl = latestDocumentUrl(asset.photographs);
                 return (
                   <article className="asset-card" key={getId(asset)}>
                     <div className="asset-card-head">
@@ -1481,6 +1491,15 @@ const PeopleAssets = () => {
                       <div><small>{asset.itemType}</small><strong>{asset.assetTag}</strong></div>
                       <i className={asset.assignmentStatus?.toLowerCase()}>{asset.assignmentStatus === "Unassigned" ? "Available" : asset.assignmentStatus}</i>
                     </div>
+                    {photographUrl ? (
+                      <div className="asset-card-media">
+                        <img
+                          src={photographUrl}
+                          alt={`${asset.brandModel || asset.assetTag} asset`}
+                          loading="lazy"
+                        />
+                      </div>
+                    ) : null}
                     <h2>{asset.brandModel}</h2>
                     <p>{asset.serialNumber || asset.bikeDetails?.registrationNumber || "No serial number"}</p>
                     <div className="asset-facts">
