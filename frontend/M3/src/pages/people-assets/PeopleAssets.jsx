@@ -247,6 +247,8 @@ const PeopleAssets = () => {
   const [employeeFiles, setEmployeeFiles] = useState({});
   const [existingDocumentStatus, setExistingDocumentStatus] = useState({});
   const [photoPreview, setPhotoPreview] = useState("");
+  const [employeeValidationStep, setEmployeeValidationStep] = useState(null);
+  const [employeeSubmitError, setEmployeeSubmitError] = useState("");
   const [officeDraft, setOfficeDraft] = useState(EMPTY_OFFICE);
   const [assetDraft, setAssetDraft] = useState(EMPTY_ASSET);
   const [assetFiles, setAssetFiles] = useState({});
@@ -459,6 +461,8 @@ const PeopleAssets = () => {
     if (saving) return;
     setModal(null);
     setEmployeeFiles({});
+    setEmployeeValidationStep(null);
+    setEmployeeSubmitError("");
     setAssetFiles({});
     setAssignmentPhoto(null);
     setReturnPhoto(null);
@@ -509,6 +513,8 @@ const PeopleAssets = () => {
     setExistingDocumentStatus(source?.documentStatus || {});
     setPhotoPreview(source?.profilePhoto?.url || "");
     setEmployeeFiles({});
+    setEmployeeValidationStep(null);
+    setEmployeeSubmitError("");
     setEmployeeStep(0);
     setModal({ type: "employee", id: source ? getId(source) : "" });
   };
@@ -623,6 +629,7 @@ const PeopleAssets = () => {
   const saveEmployee = async () => {
     setSaving(true);
     setError("");
+    setEmployeeSubmitError("");
     try {
       const uploaded = {};
       for (const type of [
@@ -662,7 +669,9 @@ const PeopleAssets = () => {
       await fetchWorkspace({ quiet: true });
       if (payload.data) await loadEmployeeDetail(getId(payload.data));
     } catch (requestError) {
-      setError(requestError.message || "Could not save employee");
+      setEmployeeSubmitError(
+        requestError.message || "Could not save employee"
+      );
     } finally {
       setSaving(false);
     }
@@ -670,6 +679,33 @@ const PeopleAssets = () => {
 
   const employeeSubmit = (event) => {
     event.preventDefault();
+    setEmployeeSubmitError("");
+
+    const firstInvalidStep =
+      employeeStep === STEPS.length - 1
+        ? [0, 1, 2].find(
+            (step) => Object.keys(validateEmployeeStep(step)).length > 0
+          )
+        : Object.keys(validateEmployeeStep(employeeStep)).length > 0
+          ? employeeStep
+          : undefined;
+
+    if (firstInvalidStep !== undefined) {
+      setEmployeeStep(firstInvalidStep);
+      setEmployeeValidationStep(firstInvalidStep);
+      window.requestAnimationFrame(() => {
+        const firstField = document.querySelector(
+          ".onboarding-form [data-employee-invalid='true']"
+        );
+        firstField?.scrollIntoView({ behavior: "smooth", block: "center" });
+        firstField
+          ?.querySelector("input, select, textarea")
+          ?.focus({ preventScroll: true });
+      });
+      return;
+    }
+
+    setEmployeeValidationStep(null);
     if (employeeStep < STEPS.length - 1) {
       setEmployeeStep((step) => step + 1);
       return;
@@ -931,6 +967,79 @@ const PeopleAssets = () => {
 
   const documentReady = (type) =>
     Boolean(employeeFiles[type] || existingDocumentStatus[type]);
+  const validateEmployeeStep = (step) => {
+    const errors = {};
+    const requiredText = (field, value, message) => {
+      if (!String(value || "").trim()) errors[field] = message;
+    };
+
+    if (step === 0) {
+      if (!documentReady("profilePhoto")) {
+        errors.profilePhoto = "Upload a recognizable employee photograph.";
+      }
+      requiredText("fullName", employeeDraft.fullName, "Enter the employee’s full name.");
+      if (!/^\d{5}-\d{7}-\d$/.test(employeeDraft.cnic)) {
+        errors.cnic = "Enter a complete CNIC in XXXXX-XXXXXXX-X format.";
+      }
+      if (!/^[+()\d][+()\d\s-]{6,22}$/.test(employeeDraft.phone.trim())) {
+        errors.phone = "Enter a valid phone number.";
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(employeeDraft.email.trim())) {
+        errors.email = "Enter a valid email address.";
+      }
+      requiredText(
+        "currentAddress",
+        employeeDraft.currentAddress,
+        "Enter the employee’s residential address."
+      );
+      requiredText(
+        "emergencyName",
+        employeeDraft.emergencyContact.name,
+        "Enter the emergency contact’s name."
+      );
+      if (
+        !/^[+()\d][+()\d\s-]{6,22}$/.test(
+          employeeDraft.emergencyContact.phone.trim()
+        )
+      ) {
+        errors.emergencyPhone = "Enter a valid emergency phone number.";
+      }
+    }
+
+    if (step === 1) {
+      requiredText("office", employeeDraft.office, "Choose an office.");
+      requiredText(
+        "department",
+        employeeDraft.department,
+        "Enter the employee’s department."
+      );
+      requiredText(
+        "designation",
+        employeeDraft.designation,
+        "Enter the employee’s designation."
+      );
+      requiredText(
+        "joiningDate",
+        employeeDraft.joiningDate,
+        "Choose the employee’s joining date."
+      );
+    }
+
+    if (step === 2) {
+      if (!documentReady("cnicFront")) {
+        errors.cnicFront = "Upload the front image of the employee’s CNIC.";
+      }
+      if (!documentReady("cnicBack")) {
+        errors.cnicBack = "Upload the back image of the employee’s CNIC.";
+      }
+    }
+
+    return errors;
+  };
+  const currentEmployeeStepErrors =
+    employeeValidationStep === employeeStep
+      ? validateEmployeeStep(employeeStep)
+      : {};
   const activationReady =
     documentReady("profilePhoto") &&
     documentReady("cnicFront") &&
@@ -1464,12 +1573,43 @@ const PeopleAssets = () => {
               );
             })}
           </div>
-          <form className="onboarding-form" onSubmit={employeeSubmit}>
+          <form className="onboarding-form" onSubmit={employeeSubmit} noValidate>
+            {employeeSubmitError && (
+              <div className="employee-form-alert submit-error" role="alert">
+                <CircleAlert size={18} />
+                <div>
+                  <strong>The employee could not be saved</strong>
+                  <p>{employeeSubmitError} Your entered information is still here.</p>
+                </div>
+              </div>
+            )}
+            {Object.keys(currentEmployeeStepErrors).length > 0 && (
+              <div className="employee-form-alert validation-error" role="alert">
+                <AlertTriangle size={18} />
+                <div>
+                  <strong>
+                    Complete {Object.keys(currentEmployeeStepErrors).length} required{" "}
+                    {Object.keys(currentEmployeeStepErrors).length === 1
+                      ? "item"
+                      : "items"}{" "}
+                    before continuing
+                  </strong>
+                  <ul>
+                    {Object.entries(currentEmployeeStepErrors).map(
+                      ([field, message]) => <li key={field}>{message}</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            )}
             {employeeStep === 0 && (
               <div className="form-stage">
                 <div className="stage-copy"><span>01</span><div><h3>Identity &amp; contact</h3><p>Create a recognizable, searchable employee identity.</p></div></div>
                 <div className="identity-form-layout">
-                  <label className="photo-upload">
+                  <label
+                    className={`photo-upload ${currentEmployeeStepErrors.profilePhoto ? "field-error" : ""}`}
+                    data-employee-invalid={Boolean(currentEmployeeStepErrors.profilePhoto)}
+                  >
                     <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
                       const file = event.target.files?.[0];
                       setEmployeeFiles((current) => ({ ...current, profilePhoto: file }));
@@ -1481,17 +1621,22 @@ const PeopleAssets = () => {
                     </span>
                     <strong>Profile photograph *</strong>
                     <small>Required before activation</small>
+                    {currentEmployeeStepErrors.profilePhoto && (
+                      <small className="field-error-text">
+                        {currentEmployeeStepErrors.profilePhoto}
+                      </small>
+                    )}
                   </label>
                   <div className="registry-form-grid">
-                    <Field label="Full name *" wide><input required autoFocus value={employeeDraft.fullName} onChange={(e) => setEmployeeDraft((c) => ({ ...c, fullName: e.target.value }))} placeholder="Employee’s legal name" /></Field>
-                    <Field label="CNIC number *"><input required value={employeeDraft.cnic} onChange={(e) => setEmployeeDraft((c) => ({ ...c, cnic: formatCnicInput(e.target.value) }))} placeholder="35201-1234567-1" maxLength={15} /></Field>
-                    <Field label="Phone number *"><input required value={employeeDraft.phone} onChange={(e) => setEmployeeDraft((c) => ({ ...c, phone: e.target.value }))} placeholder="0300-1234567" /></Field>
-                    <Field label="Email address *"><input required type="email" value={employeeDraft.email} onChange={(e) => setEmployeeDraft((c) => ({ ...c, email: e.target.value }))} placeholder="name@neesmedical.com" /></Field>
-                    <Field label="Residential address *" wide><textarea required rows={3} value={employeeDraft.currentAddress} onChange={(e) => setEmployeeDraft((c) => ({ ...c, currentAddress: e.target.value }))} placeholder="House, street, area, city" /></Field>
+                    <Field label="Full name *" name="fullName" error={currentEmployeeStepErrors.fullName} wide><input required autoFocus value={employeeDraft.fullName} onChange={(e) => setEmployeeDraft((c) => ({ ...c, fullName: e.target.value }))} placeholder="Employee’s legal name" /></Field>
+                    <Field label="CNIC number *" name="cnic" error={currentEmployeeStepErrors.cnic}><input required value={employeeDraft.cnic} onChange={(e) => setEmployeeDraft((c) => ({ ...c, cnic: formatCnicInput(e.target.value) }))} placeholder="35201-1234567-1" maxLength={15} /></Field>
+                    <Field label="Phone number *" name="phone" error={currentEmployeeStepErrors.phone}><input required value={employeeDraft.phone} onChange={(e) => setEmployeeDraft((c) => ({ ...c, phone: e.target.value }))} placeholder="0300-1234567" /></Field>
+                    <Field label="Email address *" name="email" error={currentEmployeeStepErrors.email}><input required type="email" value={employeeDraft.email} onChange={(e) => setEmployeeDraft((c) => ({ ...c, email: e.target.value }))} placeholder="name@neesmedical.com" /></Field>
+                    <Field label="Residential address *" name="currentAddress" error={currentEmployeeStepErrors.currentAddress} wide><textarea required rows={3} value={employeeDraft.currentAddress} onChange={(e) => setEmployeeDraft((c) => ({ ...c, currentAddress: e.target.value }))} placeholder="House, street, area, city" /></Field>
                     <div className="form-divider wide"><span>Emergency contact</span><small>Who should the company call first?</small></div>
-                    <Field label="Contact name *"><input required value={employeeDraft.emergencyContact.name} onChange={(e) => setEmployeeDraft((c) => ({ ...c, emergencyContact: { ...c.emergencyContact, name: e.target.value } }))} /></Field>
+                    <Field label="Contact name *" name="emergencyName" error={currentEmployeeStepErrors.emergencyName}><input required value={employeeDraft.emergencyContact.name} onChange={(e) => setEmployeeDraft((c) => ({ ...c, emergencyContact: { ...c.emergencyContact, name: e.target.value } }))} /></Field>
                     <Field label="Relationship"><input value={employeeDraft.emergencyContact.relationship} onChange={(e) => setEmployeeDraft((c) => ({ ...c, emergencyContact: { ...c.emergencyContact, relationship: e.target.value } }))} placeholder="Parent, sibling, spouse" /></Field>
-                    <Field label="Emergency phone *" wide><input required value={employeeDraft.emergencyContact.phone} onChange={(e) => setEmployeeDraft((c) => ({ ...c, emergencyContact: { ...c.emergencyContact, phone: e.target.value } }))} /></Field>
+                    <Field label="Emergency phone *" name="emergencyPhone" error={currentEmployeeStepErrors.emergencyPhone} wide><input required value={employeeDraft.emergencyContact.phone} onChange={(e) => setEmployeeDraft((c) => ({ ...c, emergencyContact: { ...c.emergencyContact, phone: e.target.value } }))} /></Field>
                   </div>
                 </div>
               </div>
@@ -1501,15 +1646,15 @@ const PeopleAssets = () => {
               <div className="form-stage">
                 <div className="stage-copy"><span>02</span><div><h3>Employment placement</h3><p>Place the employee in the correct city, team, and role.</p></div></div>
                 <div className="registry-form-grid">
-                  <Field label="Assigned office *" wide>
+                  <Field label="Assigned office *" name="office" error={currentEmployeeStepErrors.office} wide>
                     <select required value={employeeDraft.office} onChange={(e) => setEmployeeDraft((c) => ({ ...c, office: e.target.value }))}>
                       <option value="">Choose office…</option>
                       {offices.filter((office) => office.status === "Active").map((office) => <option key={getId(office)} value={getId(office)}>{office.code} · {office.name}</option>)}
                     </select>
                   </Field>
-                  <Field label="Department *"><input required value={employeeDraft.department} onChange={(e) => setEmployeeDraft((c) => ({ ...c, department: e.target.value }))} placeholder="Operations" /></Field>
-                  <Field label="Designation *"><input required value={employeeDraft.designation} onChange={(e) => setEmployeeDraft((c) => ({ ...c, designation: e.target.value }))} placeholder="Coordinator" /></Field>
-                  <Field label="Joining date *"><input required type="date" value={employeeDraft.joiningDate} onChange={(e) => setEmployeeDraft((c) => ({ ...c, joiningDate: e.target.value }))} /></Field>
+                  <Field label="Department *" name="department" error={currentEmployeeStepErrors.department}><input required value={employeeDraft.department} onChange={(e) => setEmployeeDraft((c) => ({ ...c, department: e.target.value }))} placeholder="Operations" /></Field>
+                  <Field label="Designation *" name="designation" error={currentEmployeeStepErrors.designation}><input required value={employeeDraft.designation} onChange={(e) => setEmployeeDraft((c) => ({ ...c, designation: e.target.value }))} placeholder="Coordinator" /></Field>
+                  <Field label="Joining date *" name="joiningDate" error={currentEmployeeStepErrors.joiningDate}><input required type="date" value={employeeDraft.joiningDate} onChange={(e) => setEmployeeDraft((c) => ({ ...c, joiningDate: e.target.value }))} /></Field>
                   <Field label="Record status">
                     <select value={employeeDraft.employmentStatus} onChange={(e) => setEmployeeDraft((c) => ({ ...c, employmentStatus: e.target.value }))}>
                       {EMPLOYMENT_STATUSES.map((status) => <option key={status}>{status}</option>)}
@@ -1526,8 +1671,8 @@ const PeopleAssets = () => {
               <div className="form-stage">
                 <div className="stage-copy"><span>03</span><div><h3>Private documents</h3><p>Identity files are protected and never shown in directory tables.</p></div></div>
                 <div className="document-upload-grid">
-                  <DocumentUpload label="CNIC front *" type="cnicFront" file={employeeFiles.cnicFront} ready={existingDocumentStatus.cnicFront} setFiles={setEmployeeFiles} />
-                  <DocumentUpload label="CNIC back *" type="cnicBack" file={employeeFiles.cnicBack} ready={existingDocumentStatus.cnicBack} setFiles={setEmployeeFiles} />
+                  <DocumentUpload label="CNIC front *" type="cnicFront" file={employeeFiles.cnicFront} ready={existingDocumentStatus.cnicFront} setFiles={setEmployeeFiles} error={currentEmployeeStepErrors.cnicFront} />
+                  <DocumentUpload label="CNIC back *" type="cnicBack" file={employeeFiles.cnicBack} ready={existingDocumentStatus.cnicBack} setFiles={setEmployeeFiles} error={currentEmployeeStepErrors.cnicBack} />
                   <DocumentUpload label="Employment contract" type="contractDocument" file={employeeFiles.contractDocument} ready={existingDocumentStatus.contractDocument} setFiles={setEmployeeFiles} />
                   <DocumentUpload label="Address proof" type="billProof" file={employeeFiles.billProof} ready={existingDocumentStatus.billProof} setFiles={setEmployeeFiles} />
                   <DocumentUpload label="Supporting document" type="supportingDocument" file={employeeFiles.supportingDocument} ready={existingDocumentStatus.supportingDocuments > 0} setFiles={setEmployeeFiles} />
@@ -1732,15 +1877,24 @@ const PeopleAssets = () => {
   );
 };
 
-const Field = ({ label, wide = false, children }) => (
-  <label className={wide ? "wide" : ""}>
+const Field = ({ label, name, error, wide = false, children }) => (
+  <label
+    className={`${wide ? "wide" : ""} ${error ? "field-error" : ""}`.trim()}
+    data-employee-field={name || undefined}
+    data-employee-invalid={Boolean(error)}
+  >
     <span>{label}</span>
     {children}
+    {error && <small className="field-error-text">{error}</small>}
   </label>
 );
 
-const DocumentUpload = ({ label, type, file, ready, setFiles }) => (
-  <label className={`document-upload ${file || ready ? "ready" : ""}`}>
+const DocumentUpload = ({ label, type, file, ready, setFiles, error }) => (
+  <label
+    className={`document-upload ${file || ready ? "ready" : ""} ${error ? "field-error" : ""}`}
+    data-employee-field={type}
+    data-employee-invalid={Boolean(error)}
+  >
     <input
       type="file"
       accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -1754,6 +1908,7 @@ const DocumentUpload = ({ label, type, file, ready, setFiles }) => (
       <small>{file?.name || (ready ? "Protected file already uploaded" : "Choose JPG, PNG, WebP, or PDF")}</small>
     </div>
     <i>{file ? "Selected" : ready ? "Verified" : "Upload"}</i>
+    {error && <small className="field-error-text document-error">{error}</small>}
   </label>
 );
 
