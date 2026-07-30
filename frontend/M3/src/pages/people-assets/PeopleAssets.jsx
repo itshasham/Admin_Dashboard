@@ -1753,12 +1753,6 @@ const PeopleAssets = () => {
               <Field label="Owning office *"><select required value={assetDraft.office} onChange={(e) => setAssetDraft((c) => ({ ...c, office: e.target.value }))}><option value="">Choose office…</option>{offices.filter((office) => office.status === "Active").map((office) => <option key={getId(office)} value={getId(office)}>{office.code} · {office.name}</option>)}</select></Field>
               <Field label="Condition"><select value={assetDraft.conditionStatus} onChange={(e) => setAssetDraft((c) => ({ ...c, conditionStatus: e.target.value }))}>{CONDITION_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></Field>
               <Field label="Lifecycle stage"><select value={assetDraft.lifecycleStatus} onChange={(e) => setAssetDraft((c) => ({ ...c, lifecycleStatus: e.target.value }))}>{LIFECYCLE_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></Field>
-              <div className="form-divider wide"><span>Purchase &amp; location</span><small>Financial ownership and warranty details</small></div>
-              <Field label="Purchase date"><input type="date" value={assetDraft.purchaseDate} onChange={(e) => setAssetDraft((c) => ({ ...c, purchaseDate: e.target.value }))} /></Field>
-              <Field label="Purchase price"><input type="number" min="0" value={assetDraft.purchasePrice} onChange={(e) => setAssetDraft((c) => ({ ...c, purchasePrice: e.target.value }))} placeholder="0" /></Field>
-              <Field label="Supplier"><input value={assetDraft.supplier} onChange={(e) => setAssetDraft((c) => ({ ...c, supplier: e.target.value }))} /></Field>
-              <Field label="Warranty expiry"><input type="date" value={assetDraft.warrantyExpiresAt} onChange={(e) => setAssetDraft((c) => ({ ...c, warrantyExpiresAt: e.target.value }))} /></Field>
-              <Field label="Current location" wide><input value={assetDraft.currentLocation} onChange={(e) => setAssetDraft((c) => ({ ...c, currentLocation: e.target.value }))} placeholder="Floor, room, or storage location" /></Field>
               {assetDraft.itemType === "Bike" ? (
                 <>
                   <div className="form-divider wide bike-divider"><span><Bike size={15} /> Bike identity &amp; service</span><small>Registration, insurance, mileage, and issued safety equipment</small></div>
