@@ -1787,9 +1787,8 @@ const PeopleAssets = () => {
                   <Field label="Notes" wide><textarea rows={2} value={assetDraft.specs.notes} onChange={(e) => setAssetDraft((c) => ({ ...c, specs: { ...c.specs, notes: e.target.value } }))} /></Field>
                 </>
               )}
-              <div className="form-divider wide"><span>Photographs &amp; invoice</span><small>Capture visual condition and proof of purchase</small></div>
+              <div className="form-divider wide"><span>Asset photograph</span><small>Capture the item’s visual condition at registration</small></div>
               <Field label="Asset photograph"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setAssetFiles((c) => ({ ...c, photo: e.target.files?.[0] }))} /></Field>
-              <Field label="Invoice / registration document"><input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setAssetFiles((c) => ({ ...c, invoice: e.target.files?.[0] }))} /></Field>
             </div>
             <ModalFooter close={closeModal} saving={saving} label={modal.id ? "Save asset" : "Register asset"} />
           </form>
