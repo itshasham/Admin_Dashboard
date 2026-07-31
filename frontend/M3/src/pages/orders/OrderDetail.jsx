@@ -1238,6 +1238,7 @@ const OrderDetail = () => {
           <div className="card-header"><h2>Customer</h2></div>
           <div className="info-grid">
             <div><label>Name</label><p>{order?.name || ""}</p></div>
+            {order?.clinicName ? <div><label>Clinic Name</label><p>{order.clinicName}</p></div> : null}
             <div><label>Email</label><p>{order?.email || ""}</p></div>
             <div><label>Contact</label><p>{order?.contact || ""}</p></div>
             <div><label>Payment</label><p>{order?.paymentMethod || ""}</p></div>
@@ -1250,7 +1251,7 @@ const OrderDetail = () => {
             <div><label>City</label><p>{order?.city || ""}</p></div>
             <div><label>Country</label><p>{order?.country || ""}</p></div>
             <div><label>Zip Code</label><p>{order?.zipCode || ""}</p></div>
-            <div><label>Shipping</label><p>{order?.shippingOption || ""}</p></div>
+            <div><label>Shipping</label><p>{order?.shippingOption === "city_calculated" ? "Calculated by city" : (order?.shippingOption || "")}</p></div>
             <div><label>Courier</label><p>{order?.courierCompany || order?.courierName || "—"}</p></div>
             <div><label>Tracking ID</label><p>{orderTrackingLabel}</p></div>
             <div><label>Delivery Person</label><p>{order?.deliveryPersonName || "—"}</p></div>
@@ -1263,7 +1264,7 @@ const OrderDetail = () => {
           <div className="card-header"><h2>Amounts</h2></div>
           <div className="amounts">
             <div className="amount-item"><span className="label">Subtotal</span><span className="value">{order?.subTotal ?? 0}</span></div>
-            <div className="amount-item"><span className="label">Shipping</span><span className="value">{order?.shippingCost ?? 0}</span></div>
+            <div className="amount-item"><span className="label">Shipping</span><span className="value">{order?.shippingOption === "city_calculated" ? "Calculated by city" : (order?.shippingCost ?? 0)}</span></div>
             {Number(order?.paymentFee || 0) > 0 ? (
               <div className="amount-item"><span className="label">COD Fee</span><span className="value">{order.paymentFee}</span></div>
             ) : null}
