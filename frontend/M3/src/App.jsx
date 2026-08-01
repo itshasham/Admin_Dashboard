@@ -45,6 +45,9 @@ const CloudinaryPage = lazy(() => import("./pages/cloudinary/CloudinaryPage"));
 const ContactUsList = lazy(() => import("./pages/contacts/ContactUsList"));
 const GoogleMapLinkList = lazy(() => import("./pages/google-map-links/GoogleMapLinkList"));
 const PeopleAssets = lazy(() => import("./pages/people-assets/PeopleAssets"));
+const GuestEmployeeEntry = lazy(() =>
+  import("./pages/people-assets/GuestEmployeeEntry")
+);
 const DeletePinSettings = lazy(() => import("./pages/security/DeletePinSettings"));
 const ExpenseManagement = lazy(() => import("./pages/expenses/ExpenseManagement"));
 
@@ -56,14 +59,34 @@ const RedirectToResetPassword = () => {
   return <Navigate to={`/admin/reset-password/${token}`} replace />;
 };
 
+const readStoredAdmin = () => {
+  try {
+    const raw = localStorage.getItem("adminData");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const PeopleWorkspace = () =>
+  readStoredAdmin()?.role === "Guest" ? <GuestEmployeeEntry /> : <PeopleAssets />;
+
 const RootRedirect = () => {
   let hasToken = false;
+  let role = "";
   try {
     hasToken = Boolean(localStorage.getItem("adminToken"));
+    role = String(readStoredAdmin()?.role || "");
   } catch {
     hasToken = false;
+    role = "";
   }
-  return <Navigate to={hasToken ? "/admin/dashboard" : "/admin/login"} replace />;
+  const destination = !hasToken
+    ? "/admin/login"
+    : role === "Guest"
+      ? "/admin/people-assets"
+      : "/admin/dashboard";
+  return <Navigate to={destination} replace />;
 };
 
 const AdminTitleManager = () => {
@@ -116,9 +139,12 @@ const AdminGlobalNavigation = () => {
       : []),
   ];
   const links =
-    adminRole === "ReadOnly"
+    adminRole === "Guest"
+      ? [{ label: "Employee Entry", path: "/admin/people-assets", icon: UsersRound }]
+      : adminRole === "ReadOnly"
       ? [{ label: "Expenses", path: "/admin/expenses", icon: ReceiptText }]
       : standardLinks;
+  const brandTarget = adminRole === "Guest" ? "/admin/people-assets" : "/admin/dashboard";
 
   const logout = () => {
     localStorage.removeItem("adminToken");
@@ -129,11 +155,11 @@ const AdminGlobalNavigation = () => {
   return (
     <>
       <header className="admin-page-nav">
-        <button type="button" className="admin-page-nav-brand" onClick={() => navigate("/admin/dashboard")}>
+        <button type="button" className="admin-page-nav-brand" onClick={() => navigate(brandTarget)}>
           <span className="admin-page-nav-mark">N</span>
           <span>
             <strong>NEES Medical</strong>
-            <small>Admin workspace</small>
+            <small>{adminRole === "Guest" ? "Quick entry workspace" : "Admin workspace"}</small>
           </span>
         </button>
         <nav className="admin-page-nav-links" aria-label="Admin shortcuts">
@@ -254,7 +280,7 @@ const App = () => {
           <Route path="/admin/users" element={<ProtectedRoute><UserList /></ProtectedRoute>} />
           <Route
             path="/admin/people-assets"
-            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><PeopleAssets /></ProtectedRoute>}
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO", "Guest"]}><PeopleWorkspace /></ProtectedRoute>}
           />
           <Route
             path="/admin/expenses"

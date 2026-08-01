@@ -28,10 +28,14 @@ const ProtectedRoute = ({ children, allowedRoles = null }) => {
     return <Navigate to="/admin/expenses" replace />;
   }
 
+  if (role === "Guest" && location.pathname !== "/admin/people-assets") {
+    return <Navigate to="/admin/people-assets" replace />;
+  }
+
   if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
     const hasAccess = allowedRoles.includes(role);
     if (!hasAccess) {
-      return <Navigate to="/admin/dashboard" replace state={{ denied: location.pathname }} />;
+      return <Navigate to={role === "Guest" ? "/admin/people-assets" : "/admin/dashboard"} replace state={{ denied: location.pathname }} />;
     }
   }
 
