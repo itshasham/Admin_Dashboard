@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
-import { BookOpenText, LayoutDashboard, LockKeyhole, LogOut, MessageCircle, Package, ReceiptText, ShoppingBag, Stethoscope, UsersRound } from "lucide-react";
+import { BookOpenText, LayoutDashboard, LockKeyhole, LogOut, MessageCircle, Package, ReceiptText, ShoppingBag, Stethoscope, UsersRound, Warehouse } from "lucide-react";
 
 // Lazy-loaded pages to reduce initial bundle
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
@@ -50,6 +50,7 @@ const GuestEmployeeEntry = lazy(() =>
 );
 const DeletePinSettings = lazy(() => import("./pages/security/DeletePinSettings"));
 const ExpenseManagement = lazy(() => import("./pages/expenses/ExpenseManagement"));
+const InventoryManagement = lazy(() => import("./pages/inventory/InventoryManagement"));
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import { DeletePinProvider } from "./components/DeletePinProvider";
@@ -129,6 +130,9 @@ const AdminGlobalNavigation = () => {
     { label: "Overview", path: "/admin/dashboard", icon: LayoutDashboard },
     { label: "Orders", path: "/admin/orders", icon: ShoppingBag },
     { label: "Expenses", path: "/admin/expenses", icon: ReceiptText },
+    ...(adminRole === "CEO"
+      ? [{ label: "Stock", path: "/admin/inventory", icon: Warehouse }]
+      : []),
     { label: "Retail", path: "/admin/products", icon: Package },
     { label: "Clinical", path: "/admin/clinical-products", icon: Stethoscope },
     { label: "People", path: "/admin/people-assets", icon: UsersRound },
@@ -289,6 +293,10 @@ const App = () => {
           <Route
             path="/admin/security/delete-pin"
             element={<ProtectedRoute allowedRoles={["CEO"]}><DeletePinSettings /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/inventory"
+            element={<ProtectedRoute allowedRoles={["CEO"]}><InventoryManagement /></ProtectedRoute>}
           />
           <Route
             path="/admin/whatsapp"

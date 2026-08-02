@@ -35,6 +35,7 @@ import {
   UsersRound,
   Users,
   WalletCards,
+  Warehouse,
   Wrench,
   X,
 } from "lucide-react";
@@ -707,6 +708,7 @@ const AdminDashboard = () => {
       items: [
         { label: "Overview", hint: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, show: true },
         { label: "Orders", hint: "Fulfillment", path: "/admin/orders", icon: ShoppingBag, show: true },
+        { label: "Stock control", hint: "Home → office", path: "/admin/inventory", icon: Warehouse, show: adminData?.role === "CEO" },
         { label: "Office expenses", hint: "Spend & reimbursements", path: "/admin/expenses", icon: ReceiptText, show: true },
         { label: "Customer leads", hint: "Contact inbox", path: "/admin/contact-us", icon: ContactRound, show: canAccessRestrictedSections() },
       ],
