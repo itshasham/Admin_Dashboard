@@ -207,8 +207,7 @@ const GuestEmployeeEntry = () => {
     return (await readPayload(response, `Could not upload ${file.name}`)).data;
   };
 
-  const submit = async (event) => {
-    event.preventDefault();
+  const submitEmployee = async () => {
     const identityError = validateStep(0);
     const employmentError = validateStep(1);
     if (identityError || employmentError) {
@@ -324,7 +323,7 @@ const GuestEmployeeEntry = () => {
           </div>
         </aside>
 
-        <form className="guest-entry-form" onSubmit={submit}>
+        <form className="guest-entry-form" onSubmit={(event) => event.preventDefault()}>
           <div className="guest-entry-form-heading">
             <p>{STEPS[step].hint}</p>
             <h2>{
@@ -434,7 +433,7 @@ const GuestEmployeeEntry = () => {
                 Continue <ArrowRight size={18} />
               </button>
             ) : (
-              <button type="submit" className="guest-entry-next" disabled={saving}>
+              <button type="button" className="guest-entry-next" onClick={submitEmployee} disabled={saving}>
                 {saving ? <><LoaderCircle className="guest-entry-spin" size={18} /> {uploadingLabel || "Saving…"}</> : <>Submit employee draft <ArrowRight size={18} /></>}
               </button>
             )}
