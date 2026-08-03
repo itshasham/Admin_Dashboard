@@ -238,6 +238,7 @@ const latestDocumentUrl = (documents) => {
 const PeopleAssets = () => {
   const role = currentRole();
   const isCEO = role === "CEO";
+  const canManageEmployees = ["Admin", "Manager", "CEO"].includes(role);
   const [activeView, setActiveView] = useState("employees");
   const [employees, setEmployees] = useState([]);
   const [offices, setOffices] = useState([]);
@@ -265,6 +266,8 @@ const PeopleAssets = () => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [employeeStatusSaving, setEmployeeStatusSaving] = useState("");
+  const [employeeStatusError, setEmployeeStatusError] = useState("");
   const [assignmentDraft, setAssignmentDraft] = useState({
     employeeId: "",
     assetId: "",
@@ -343,6 +346,7 @@ const PeopleAssets = () => {
   const loadEmployeeDetail = useCallback(async (id) => {
     if (!id) return;
     setSelectedEmployeeId(id);
+    setEmployeeStatusError("");
     setDetailLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
@@ -959,6 +963,34 @@ const PeopleAssets = () => {
     }
   };
 
+  const updateEmployeeStatus = async (employee, employmentStatus) => {
+    const employeeId = getId(employee);
+    if (!employeeId) return;
+
+    setEmployeeStatusSaving(employeeId);
+    setEmployeeStatusError("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/${employeeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ employmentStatus }),
+      });
+      const payload = await readJson(
+        response,
+        `Could not set ${employee.fullName} to ${employmentStatus}`
+      );
+      setNotice(payload.message || `Employee status changed to ${employmentStatus}`);
+      await fetchWorkspace({ quiet: true });
+      await loadEmployeeDetail(employeeId);
+    } catch (requestError) {
+      setEmployeeStatusError(
+        requestError.message || "Could not update the employee status"
+      );
+    } finally {
+      setEmployeeStatusSaving("");
+    }
+  };
+
   const accessDocument = async (type, action = "view") => {
     if (!selectedEmployeeId) return;
     try {
@@ -1317,7 +1349,23 @@ const PeopleAssets = () => {
                       <p>{selectedEmployee.employeeCode}</p>
                       <h2>{selectedEmployee.fullName}</h2>
                       <span>{selectedEmployee.designation} · {selectedEmployee.department}</span>
-                      <div>
+                      <i className={`profile-employment-status ${selectedEmployee.employmentStatus?.toLowerCase().replace(/\s/g, "-")}`}>
+                        {selectedEmployee.employmentStatus}
+                      </i>
+                      <div className="profile-actions">
+                        {canManageEmployees && selectedEmployee.employmentStatus === "Draft" && (
+                          <button
+                            type="button"
+                            className="activate"
+                            disabled={employeeStatusSaving === getId(selectedEmployee)}
+                            onClick={() => updateEmployeeStatus(selectedEmployee, "Active")}
+                          >
+                            <CheckCircle2 size={14} />
+                            {employeeStatusSaving === getId(selectedEmployee)
+                              ? "Activating…"
+                              : "Activate"}
+                          </button>
+                        )}
                         <button type="button" onClick={() => openEmployeeForm(selectedEmployee)}>
                           <Pencil size={14} /> Edit
                         </button>
@@ -1346,6 +1394,11 @@ const PeopleAssets = () => {
                           </button>
                         )}
                       </div>
+                      {employeeStatusError && (
+                        <div className="profile-status-error" role="alert">
+                          <CircleAlert size={15} /> {employeeStatusError}
+                        </div>
+                      )}
                     </div>
 
                     <div className="profile-contact-grid">

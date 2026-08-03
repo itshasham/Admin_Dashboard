@@ -712,8 +712,26 @@
   font-size: 0.75rem;
 }
 
-.profile-identity > div:last-child {
+.profile-employment-status {
+  margin-top: 9px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #f6ecd8;
+  color: #8a6421;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.profile-employment-status.active {
+  background: #ddf3eb;
+  color: #0d7766;
+}
+
+.profile-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 7px;
   margin-top: 14px;
 }
@@ -737,6 +755,36 @@
 
 .profile-identity button.danger {
   color: #a0453e;
+}
+
+.profile-identity button.activate {
+  border-color: #0d7766;
+  background: #0d7766;
+  color: #fff;
+}
+
+.profile-identity button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.profile-status-error {
+  display: flex;
+  width: min(100%, 390px);
+  margin-top: 12px;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: #fff0eb;
+  color: #91443c;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.profile-status-error svg {
+  flex: 0 0 auto;
 }
 
 .profile-contact-grid {
