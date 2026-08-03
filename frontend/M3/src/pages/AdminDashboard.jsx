@@ -366,6 +366,7 @@ const AdminDashboard = () => {
   const canAccessStaffManagement = () => ["Manager", "CEO"].includes(adminData?.role);
   const canViewCustomers = () => adminData?.role === "CEO";
   const canAccessRestrictedSections = () => ["Manager", "CEO"].includes(adminData?.role);
+  const canAccessPeopleAssets = () => ["Admin", "Manager", "CEO"].includes(adminData?.role);
 
   useEffect(() => {
     document.title = "NEES Medical Admin";
@@ -736,7 +737,7 @@ const AdminDashboard = () => {
     {
       label: "Administration",
       items: [
-        { label: "People & equipment", hint: "Custody records", path: "/admin/people-assets", icon: UsersRound, show: canAccessRestrictedSections() },
+        { label: "People, places & property", hint: "Custody records", path: "/admin/people-assets", icon: UsersRound, show: canAccessPeopleAssets() },
         { label: "Staff", hint: "Roles & access", path: "/admin/staff", icon: UserRoundCog, show: canAccessStaffManagement() },
         { label: "Customers", hint: "Accounts", path: "/admin/users", icon: Users, show: canViewCustomers() },
         { label: "Image manager", hint: "Cloud assets", path: "/admin/cloudinary", icon: ImageIcon, show: true },

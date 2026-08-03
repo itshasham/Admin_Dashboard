@@ -284,7 +284,7 @@ const App = () => {
           <Route path="/admin/users" element={<ProtectedRoute><UserList /></ProtectedRoute>} />
           <Route
             path="/admin/people-assets"
-            element={<ProtectedRoute allowedRoles={["Manager", "CEO", "Guest"]}><PeopleWorkspace /></ProtectedRoute>}
+            element={<ProtectedRoute allowedRoles={["Admin", "Manager", "CEO", "Guest"]}><PeopleWorkspace /></ProtectedRoute>}
           />
           <Route
             path="/admin/expenses"
