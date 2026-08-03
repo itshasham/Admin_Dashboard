@@ -60,14 +60,14 @@ const DOCUMENT_FIELDS = [
   {
     key: "cnicFront",
     label: "CNIC front",
-    hint: "Image or PDF",
+    hint: "Required · Image or PDF",
     accept: "image/jpeg,image/png,image/webp,application/pdf",
     icon: IdCard,
   },
   {
     key: "cnicBack",
     label: "CNIC back",
-    hint: "Image or PDF",
+    hint: "Required · Image or PDF",
     accept: "image/jpeg,image/png,image/webp,application/pdf",
     icon: IdCard,
   },
@@ -175,12 +175,17 @@ const GuestEmployeeEntry = () => {
       if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
         return "Enter a valid email address.";
       }
-      if (form.cnic && !/^\d{5}-\d{7}-\d$/.test(form.cnic)) {
+      if (!form.cnic.trim()) return "Employee CNIC is required.";
+      if (!/^\d{5}-\d{7}-\d$/.test(form.cnic)) {
         return "CNIC must use the format 12345-1234567-1.";
       }
     }
     if (targetStep === 1 && !form.office) {
       return "Select the employee office before continuing.";
+    }
+    if (targetStep === 2) {
+      if (!files.cnicFront) return "Upload the front of the employee CNIC.";
+      if (!files.cnicBack) return "Upload the back of the employee CNIC.";
     }
     return "";
   };
@@ -208,11 +213,11 @@ const GuestEmployeeEntry = () => {
   };
 
   const submitEmployee = async () => {
-    const identityError = validateStep(0);
-    const employmentError = validateStep(1);
-    if (identityError || employmentError) {
-      setError(identityError || employmentError);
-      setStep(identityError ? 0 : 1);
+    const validationErrors = STEPS.map((_, index) => validateStep(index));
+    const invalidStep = validationErrors.findIndex(Boolean);
+    if (invalidStep !== -1) {
+      setError(validationErrors[invalidStep]);
+      setStep(invalidStep);
       return;
     }
 
@@ -335,7 +340,7 @@ const GuestEmployeeEntry = () => {
             }</h2>
           </div>
 
-          {error && <div className="guest-entry-error" role="alert">{error}</div>}
+          {error && step !== 2 && <div className="guest-entry-error" role="alert">{error}</div>}
 
           {step === 0 && (
             <div className="guest-entry-fields">
@@ -352,8 +357,8 @@ const GuestEmployeeEntry = () => {
                 <div><Mail size={18} /><input type="email" value={form.email} onChange={(event) => setField("email", event.target.value)} placeholder="name@example.com" autoComplete="email" /></div>
               </label>
               <label className="guest-entry-field">
-                <span>CNIC</span>
-                <div><IdCard size={18} /><input inputMode="numeric" value={form.cnic} onChange={(event) => setField("cnic", formatCnic(event.target.value))} placeholder="12345-1234567-1" /></div>
+                <span>CNIC <em>Required</em></span>
+                <div><IdCard size={18} /><input required inputMode="numeric" value={form.cnic} onChange={(event) => setField("cnic", formatCnic(event.target.value))} placeholder="12345-1234567-1" /></div>
               </label>
               <label className="guest-entry-upload guest-entry-photo">
                 <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFiles((current) => ({ ...current, profilePhoto: event.target.files?.[0] || null }))} />
@@ -402,13 +407,13 @@ const GuestEmployeeEntry = () => {
                 </div>
               </section>
               <section>
-                <div className="guest-entry-section-title"><div><strong>Identity documents</strong><small>Optional now; managers can complete them later</small></div></div>
+                <div className="guest-entry-section-title"><div><strong>Identity documents</strong><small>CNIC front and back are required; other documents are optional</small></div></div>
                 <div className="guest-entry-document-grid">
                   {DOCUMENT_FIELDS.filter((item) => item.key !== "profilePhoto").map((document) => {
                     const Icon = document.icon;
                     return (
                       <label className={files[document.key] ? "guest-entry-document has-file" : "guest-entry-document"} key={document.key}>
-                        <input type="file" accept={document.accept} onChange={(event) => setFiles((current) => ({ ...current, [document.key]: event.target.files?.[0] || null }))} />
+                        <input required={document.key === "cnicFront" || document.key === "cnicBack"} type="file" accept={document.accept} onChange={(event) => setFiles((current) => ({ ...current, [document.key]: event.target.files?.[0] || null }))} />
                         <span>{files[document.key] ? <Check size={18} /> : <Icon size={18} />}</span>
                         <div><strong>{files[document.key]?.name || document.label}</strong><small>{files[document.key] ? "Ready to upload" : document.hint}</small></div>
                         <UploadCloud size={17} />
@@ -423,6 +428,8 @@ const GuestEmployeeEntry = () => {
               </div>
             </div>
           )}
+
+          {error && step === 2 && <div className="guest-entry-error" role="alert">{error}</div>}
 
           <footer className="guest-entry-actions">
             <button type="button" className="guest-entry-back" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || saving}>
