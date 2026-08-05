@@ -344,6 +344,35 @@
 .inventory-search input { width: 100%; min-width: 0; padding: 0.72rem 0; border: 0; outline: 0; color: var(--iv-ink); background: transparent; font-size: 0.78rem; }
 .inventory-filters select { min-width: 0; padding: 0.72rem; border: 1px solid var(--iv-line); border-radius: 11px; color: #354c48; background: #fff; font-size: 0.75rem; font-weight: 700; }
 
+.inventory-export-bar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(150px, 180px) auto;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 1.4rem 1.1rem;
+  padding: 0.8rem;
+  border: 1px solid #cfe2dc;
+  border-radius: 13px;
+  background: linear-gradient(120deg, #f2f9f6, #f8fbfa);
+}
+
+.inventory-export-summary { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
+.inventory-export-icon { display: grid; flex: 0 0 2.35rem; width: 2.35rem; height: 2.35rem; place-items: center; border-radius: 10px; color: #fff; background: var(--iv-green); }
+.inventory-export-summary > span:last-child { display: grid; min-width: 0; gap: 0.12rem; }
+.inventory-export-summary strong { color: var(--iv-ink); font-size: 0.76rem; }
+.inventory-export-summary small { color: var(--iv-muted); font-size: 0.64rem; line-height: 1.4; }
+
+.inventory-export-range { display: grid; gap: 0.28rem; }
+.inventory-export-range > span { color: #60736f; font-size: 0.59rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
+.inventory-export-range select { width: 100%; min-height: 2.4rem; padding: 0.55rem 0.65rem; border: 1px solid var(--iv-line); border-radius: 9px; color: #29443e; background: #fff; font-size: 0.7rem; font-weight: 800; }
+
+.inventory-export-actions { display: flex; align-items: center; gap: 0.38rem; }
+.inventory-export-actions button { display: inline-flex; min-height: 2.4rem; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.55rem 0.72rem; border: 1px solid #bdd8d1; border-radius: 9px; color: #24584f; background: #fff; font-size: 0.67rem; font-weight: 800; cursor: pointer; }
+.inventory-export-actions button.excel { color: #fff; border-color: var(--iv-green); background: var(--iv-green); }
+.inventory-export-actions button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 13px rgba(13, 80, 70, 0.12); }
+.inventory-export-actions button:disabled,
+.inventory-export-range select:disabled { cursor: not-allowed; opacity: 0.55; }
+
 .inventory-table-wrap { min-height: 270px; overflow-x: auto; border-top: 1px solid var(--iv-line); }
 .inventory-table { width: 100%; border-collapse: collapse; }
 .inventory-table th { padding: 0.7rem 0.75rem; color: #82908e; background: #f8faf9; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.09em; text-align: left; text-transform: uppercase; white-space: nowrap; }
@@ -487,6 +516,8 @@
   .inventory-workspace { grid-template-columns: 1fr; }
   .inventory-action-card { position: static; }
   .inventory-filters { grid-template-columns: 1fr 150px 160px; }
+  .inventory-export-bar { grid-template-columns: minmax(240px, 1fr) minmax(145px, 170px); }
+  .inventory-export-actions { grid-column: 1 / -1; justify-content: flex-end; }
 }
 
 @media (max-width: 720px) {
@@ -509,6 +540,9 @@
   .catalog-split { flex-wrap: wrap; }
   .inventory-filters { grid-template-columns: 1fr 1fr; padding: 0 1.1rem 1rem; }
   .inventory-search { grid-column: 1 / -1; }
+  .inventory-export-bar { grid-template-columns: 1fr; margin: 0 1.1rem 1rem; }
+  .inventory-export-actions { grid-column: auto; justify-content: stretch; }
+  .inventory-export-actions button { flex: 1; }
   .inventory-table thead { display: none; }
   .inventory-table,
   .inventory-table tbody,
@@ -538,6 +572,7 @@
   .inventory-metrics article:nth-child(4) small { font-size: 0.6rem; }
   .inventory-filters { grid-template-columns: 1fr; }
   .inventory-search { grid-column: auto; }
+  .inventory-export-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .action-form-grid.two { grid-template-columns: 1fr; }
   .action-switch button { font-size: 0; }
   .action-switch button svg { width: 17px; height: 17px; }

@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardList,
+  FileDown,
+  FileSpreadsheet,
   History,
   House,
   LoaderCircle,
@@ -44,6 +46,12 @@ const EMPTY_FORM = {
   location: "home",
   note: "",
 };
+
+const EXPORT_PERIODS = [
+  { value: "week", label: "Last 7 days", shortLabel: "weekly" },
+  { value: "month", label: "Last 30 days", shortLabel: "monthly" },
+  { value: "quarter", label: "Last 3 months", shortLabel: "three-month" },
+];
 
 const ACTIONS = {
   receive: {
@@ -98,6 +106,14 @@ const dateTime = (value) => {
   });
 };
 
+const downloadFilename = (response, fallback) => {
+  const disposition = response.headers.get("content-disposition") || "";
+  const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1].replace(/["']/g, ""));
+  const standardMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return standardMatch?.[1] || fallback;
+};
+
 const unique = (values) =>
   [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
@@ -127,6 +143,8 @@ const InventoryManagement = () => {
   const [action, setAction] = useState("receive");
   const [form, setForm] = useState(EMPTY_FORM);
   const [filters, setFilters] = useState({ search: "", kind: "", category: "" });
+  const [exportPeriod, setExportPeriod] = useState("month");
+  const [exporting, setExporting] = useState("");
 
   const loadData = useCallback(async ({ quiet = false } = {}) => {
     if (quiet) setRefreshing(true);
@@ -186,6 +204,16 @@ const InventoryManagement = () => {
         .includes(query);
     });
   }, [filters, items]);
+
+  const exportableItems = useMemo(
+    () => visibleItems.filter((item) => Number(item.home) > 0 || Number(item.office) > 0),
+    [visibleItems]
+  );
+
+  const selectedExportPeriod = useMemo(
+    () => EXPORT_PERIODS.find((period) => period.value === exportPeriod) || EXPORT_PERIODS[1],
+    [exportPeriod]
+  );
 
   const actionCategories = useMemo(
     () =>
@@ -321,6 +349,46 @@ const InventoryManagement = () => {
     }
   };
 
+  const downloadStockReport = async (format) => {
+    if (exportableItems.length === 0 || exporting) return;
+    setError("");
+    setNotice("");
+    setExporting(format);
+    try {
+      const query = new URLSearchParams({ period: exportPeriod });
+      if (filters.search.trim()) query.set("search", filters.search.trim());
+      if (filters.kind) query.set("kind", filters.kind);
+      if (filters.category) query.set("category", filters.category);
+      const response = await fetch(`${API_BASE_URL}/inventory/export/${format}?${query}`, {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        await readJson(response, "Could not export the stock report");
+      }
+      const blob = await response.blob();
+      if (!blob.size) throw new Error("The stock report was empty. Please try again.");
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = downloadFilename(
+        response,
+        `nees-stock-${selectedExportPeriod.shortLabel}-${new Date().toISOString().slice(0, 10)}.${format}`
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+      setNotice(
+        `${format === "xlsx" ? "Excel" : "CSV"} stock report downloaded for ${exportableItems.length} positive-stock products.`
+      );
+    } catch (exportError) {
+      setError(exportError?.message || "Could not export the stock report");
+    } finally {
+      setExporting("");
+    }
+  };
+
   const ActionIcon = ACTIONS[action].icon;
 
   return (
@@ -439,6 +507,50 @@ const InventoryManagement = () => {
                 <option value="">All categories</option>
                 {categories.map((category) => <option key={category}>{category}</option>)}
               </select>
+            </div>
+
+            <div className="inventory-export-bar" aria-label="Download stock report">
+              <div className="inventory-export-summary">
+                <span className="inventory-export-icon"><FileDown size={18} /></span>
+                <span>
+                  <strong>Download stock report</strong>
+                  <small>
+                    {number(exportableItems.length)} products with Home or Office stock above zero.
+                    Current balances plus {selectedExportPeriod.label.toLowerCase()} of movement history.
+                  </small>
+                </span>
+              </div>
+              <label className="inventory-export-range">
+                <span>Reporting range</span>
+                <select
+                  value={exportPeriod}
+                  onChange={(event) => setExportPeriod(event.target.value)}
+                  disabled={Boolean(exporting)}
+                >
+                  {EXPORT_PERIODS.map((period) => (
+                    <option key={period.value} value={period.value}>{period.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="inventory-export-actions">
+                <button
+                  type="button"
+                  onClick={() => downloadStockReport("csv")}
+                  disabled={exportableItems.length === 0 || Boolean(exporting)}
+                >
+                  {exporting === "csv" ? <LoaderCircle className="spin" size={15} /> : <FileDown size={15} />}
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  className="excel"
+                  onClick={() => downloadStockReport("xlsx")}
+                  disabled={exportableItems.length === 0 || Boolean(exporting)}
+                >
+                  {exporting === "xlsx" ? <LoaderCircle className="spin" size={15} /> : <FileSpreadsheet size={15} />}
+                  Excel
+                </button>
+              </div>
             </div>
 
             <div className="inventory-table-wrap">
