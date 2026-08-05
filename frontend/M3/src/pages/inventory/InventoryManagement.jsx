@@ -516,7 +516,7 @@ const InventoryManagement = () => {
                   <strong>Download stock report</strong>
                   <small>
                     {number(exportableItems.length)} products with Home or Office stock above zero.
-                    Current balances plus {selectedExportPeriod.label.toLowerCase()} of movement history.
+                    The file contains Product, Unit, Home Quantity, Office Quantity, and a {selectedExportPeriod.label.toLowerCase()} report label.
                   </small>
                 </span>
               </div>
