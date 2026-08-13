@@ -526,6 +526,31 @@ const BlogForm = () => {
                     }}
                   />
                   <div className="subtext">Supports rich text formatting. Saved as HTML for frontend rendering.</div>
+                  <details style={{ marginTop: 12 }}>
+                    <summary style={{ cursor: "pointer", fontWeight: 700 }}>
+                      HTML Source (advanced)
+                    </summary>
+                    <textarea
+                      aria-label="HTML Source"
+                      name="htmlSource"
+                      rows={14}
+                      value={blog.content}
+                      onChange={(event) =>
+                        setBlog((prev) => ({ ...prev, content: event.target.value }))
+                      }
+                      spellCheck={false}
+                      style={{
+                        width: "100%",
+                        marginTop: 10,
+                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                      }}
+                    />
+                    <div className="subtext">
+                      Paste trusted article HTML here. The rich-text preview stays synchronized.
+                    </div>
+                  </details>
                 </div>
               </div>
             </div>
