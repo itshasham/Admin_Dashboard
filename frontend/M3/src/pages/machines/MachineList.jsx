@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import "../products/product.css";
 import { API_BASE_URL } from "../../config/api";
 
@@ -110,7 +110,8 @@ const MachineList = () => {
       )}
 
       {!loading && !error && machines.length > 0 && (
-        <table className="table">
+        <div className="table-responsive">
+          <table className="table">
           <thead>
             <tr>
               <th>Image</th>
@@ -166,7 +167,8 @@ const MachineList = () => {
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import React from "react";
+/* eslint-disable react/prop-types */
 import { Navigate, useLocation } from "react-router-dom";
 
 const ProtectedRoute = ({ children, allowedRoles = null }) => {
@@ -21,14 +21,34 @@ const ProtectedRoute = ({ children, allowedRoles = null }) => {
     return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
   }
 
+  if (
+    role === "ReadOnly" &&
+    location.pathname !== "/admin/expenses"
+  ) {
+    return <Navigate to="/admin/expenses" replace />;
+  }
+
+  if (role === "Guest" && location.pathname !== "/admin/people-assets") {
+    return <Navigate to="/admin/people-assets" replace />;
+  }
+
   if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
     const hasAccess = allowedRoles.includes(role);
     if (!hasAccess) {
-      return <Navigate to="/admin/dashboard" replace state={{ denied: location.pathname }} />;
+      return <Navigate to={role === "Guest" ? "/admin/people-assets" : "/admin/dashboard"} replace state={{ denied: location.pathname }} />;
     }
   }
 
-  return children;
+  if (location.pathname === "/admin/dashboard") {
+    return children;
+  }
+
+  return (
+    <>
+      <a href="#admin-page-main" className="admin-skip-link">Skip to main content</a>
+      <main id="admin-page-main">{children}</main>
+    </>
+  );
 };
 
 export default ProtectedRoute;

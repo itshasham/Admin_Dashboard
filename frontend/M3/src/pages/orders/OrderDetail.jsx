@@ -30,6 +30,7 @@ const OrderDetail = () => {
   const [paymentUploadProgress, setPaymentUploadProgress] = useState(0);
   const [draggingProofs, setDraggingProofs] = useState(false);
   const [previewProofUrl, setPreviewProofUrl] = useState("");
+  const [deleteSaving, setDeleteSaving] = useState(false);
   const paymentProofInputRef = useRef(null);
   const paymentProofImagesRef = useRef([]);
   const courierCompanies = ["DHL", "TCS", "FedEx", "Blue Dart", "Leopards", "PostEx", "Local"];
@@ -586,8 +587,8 @@ const OrderDetail = () => {
 
   const updatePaymentVerification = async () => {
     if (!id) return;
-    if (role !== "CEO") {
-      alert("Only CEO can update payment verification.");
+    if (!["CEO", "Manager"].includes(role)) {
+      alert("Only CEO or Manager can update payment verification.");
       return;
     }
 
@@ -695,6 +696,33 @@ const OrderDetail = () => {
     }
   };
 
+  const deleteOrder = async () => {
+    if (!id || role !== "CEO") return;
+
+    setDeleteSaving(true);
+    try {
+      const resp = await fetch(`${API_BASE_URL}/order/admin/orders/${id}`, {
+        method: "DELETE",
+        headers: { ...getAuthHeaders() },
+      });
+      const isJson = resp.headers.get("content-type")?.includes("application/json");
+      const data = isJson ? await resp.json().catch(() => ({})) : {};
+
+      if (!resp.ok) {
+        throw new Error(data?.message || data?.error || "Failed to delete order");
+      }
+
+      alert("Order deleted successfully.");
+      window.location.href = "/admin/orders";
+    } catch (err) {
+      if (err.message !== "Deletion cancelled.") {
+        setError(err.message || "Failed to delete order");
+      }
+    } finally {
+      setDeleteSaving(false);
+    }
+  };
+
   const openPrintSlip = async (format = "auto") => {
     if (!order) return;
     if (!["CEO", "Manager", "Admin"].includes(role)) {
@@ -712,12 +740,69 @@ const OrderDetail = () => {
 
     const safe = (v) => String(v ?? "").trim();
     const fmtDate = (d) => { try { return d ? new Date(d).toLocaleString() : ""; } catch { return safe(d); } };
+    const toAmount = (value) => {
+      const amount = Number(value);
+      return Number.isFinite(amount) ? amount : 0;
+    };
+    const fmtAmount = (value) =>
+      new Intl.NumberFormat("en-PK", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(toAmount(value));
 
     const orderId = safe(order?._id || id);
     const items = Array.isArray(order?.cart) ? order.cart : [];
     const expectedDelivery =
       order?.expectedDeliveryDate || order?.expectedDelivery || order?.deliveryDate || "";
     const notes = order?.deliveryNotes || order?.orderNote || "";
+    const shippingAmount = toAmount(order?.shippingCost);
+    const paymentFeeAmount = toAmount(order?.paymentFee);
+    const discountAmount = toAmount(order?.discount);
+    const totalAmount = toAmount(order?.totalAmount);
+    const inferredItemSubtotal = items.reduce((sum, item) => {
+      const qty = toAmount(item?.orderQuantity ?? item?.quantity ?? item?.qty ?? 1) || 1;
+      const explicitSubtotal = toAmount(item?.subTotal ?? item?.subtotal ?? item?.lineSubtotal);
+      if (explicitSubtotal > 0) return sum + explicitSubtotal;
+
+      const unitPrice = toAmount(
+        item?.price ??
+        item?.originalPrice ??
+        item?.itemPrice ??
+        item?.unitPrice ??
+        item?.product?.price ??
+        item?.productId?.price
+      );
+
+      return unitPrice > 0 ? sum + unitPrice * qty : sum;
+    }, 0);
+    const resolvedSubtotal =
+      toAmount(order?.subTotal ?? order?.subtotal) ||
+      Math.max(0, totalAmount - shippingAmount - paymentFeeAmount + discountAmount) ||
+      inferredItemSubtotal;
+    const amountRowsHtml = [
+      { label: "Original Price", value: `PKR ${fmtAmount(resolvedSubtotal)}` },
+      {
+        label: "Discount",
+        value: discountAmount > 0 ? `- PKR ${fmtAmount(discountAmount)}` : "PKR 0",
+      },
+      {
+        label: "Delivery Charges",
+        value: shippingAmount > 0 ? `PKR ${fmtAmount(shippingAmount)}` : "Free",
+      },
+      ...(paymentFeeAmount > 0
+        ? [{ label: "COD Fee", value: `PKR ${fmtAmount(paymentFeeAmount)}` }]
+        : []),
+      { label: "Payable Total", value: `PKR ${fmtAmount(totalAmount)}`, big: true },
+    ]
+      .map(
+        (row) => `
+          <div class="row">
+            <div class="k">${escapeHtml(row.label)}</div>
+            <div class="v${row.big ? " big" : ""}">${escapeHtml(row.value)}</div>
+          </div>
+        `
+      )
+      .join("");
 
     const rowsHtml = items
       .map((it, idx) => {
@@ -847,7 +932,7 @@ const OrderDetail = () => {
                 </table>
 
                 <div class="totals">
-                  <div class="row"><div class="k">Total Amount</div><div class="v big">${escapeHtml(order?.totalAmount ?? "")}</div></div>
+                  ${amountRowsHtml}
                 </div>
               </div>
 
@@ -932,7 +1017,7 @@ const OrderDetail = () => {
 
   useEffect(() => {
     const canPastePaymentProof =
-      role === "CEO" &&
+      ["CEO", "Manager"].includes(role) &&
       isProofUploadEnabled();
     if (!canPastePaymentProof) return undefined;
 
@@ -1024,7 +1109,8 @@ const OrderDetail = () => {
     if (currentStatus === "pending") return ["pending", "processing", "cancel"];
     if (currentStatus === "processing") return ["processing", "dispatch", "cancel"];
     if (currentStatus === "dispatch") return ["dispatch", "cancel"];
-    if (currentStatus === "cancel") return ["cancel"];
+    // Allow an administrator to correct an order that was cancelled in error.
+    if (currentStatus === "cancel") return ["cancel", "dispatch"];
     return ["pending", "processing", "dispatch", "cancel"];
   })();
   const selectedStatus = statusOptions.includes(displayStatus) ? displayStatus : statusOptions[0];
@@ -1035,7 +1121,8 @@ const OrderDetail = () => {
   const orderIsLocalDelivery = isLocalDeliveryCourier(orderCourierName);
   const orderTrackingLabel = orderIsLocalDelivery ? "N/A (Local Delivery)" : (order?.trackingId || order?.trackingNumber || "—");
   const canViewPaymentVerification = role === "CEO" || role === "Manager";
-  const canEditPaymentVerification = role === "CEO";
+  const canEditPaymentVerification = role === "CEO" || role === "Manager";
+  const canDeleteOrder = role === "CEO";
   const canShowProofUploader = isProofUploadEnabled();
   const paymentVerificationStatusLabel =
     String(order?.paymentVerification?.status || "").toLowerCase() === "verified" ||
@@ -1052,6 +1139,31 @@ const OrderDetail = () => {
   const paymentVerificationAuditLogs = Array.isArray(order?.paymentVerification?.auditLogs)
     ? [...order.paymentVerification.auditLogs].reverse()
     : [];
+  const orderAuditLogs = Array.isArray(order?.auditLogs)
+    ? [...order.auditLogs].reverse()
+    : [];
+  const formatAuditValue = (value) => {
+    if (value === undefined || value === null || value === "") return "—";
+    if (typeof value === "boolean") return value ? "true" : "false";
+    if (typeof value === "object") {
+      if ("proofImageCount" in value) {
+        return [
+          `status: ${value.status || "pending"}`,
+          `amount: ${value.amountReceived ?? 0}`,
+          `method: ${value.receivedMethod || "—"}`,
+          `proofs: ${value.proofImageCount ?? 0}`,
+        ].join(", ");
+      }
+      return JSON.stringify(value);
+    }
+    return String(value);
+  };
+  const auditActionLabel = (action = "") => {
+    const normalized = String(action || "").trim();
+    if (normalized === "status_updated") return "Order Status Updated";
+    if (normalized === "payment_verification_updated") return "Payment Verification Updated";
+    return normalized.replace(/_/g, " ") || "Order Updated";
+  };
 
   // Wrap the entire render in a try-catch to prevent white screen
   try {
@@ -1072,7 +1184,7 @@ const OrderDetail = () => {
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
-          {normalizeStatus(selectedStatus) === "dispatch" && currentStatus === "processing" && (
+          {normalizeStatus(selectedStatus) === "dispatch" && (currentStatus === "processing" || currentStatus === "cancel") && (
             <>
               <select
                 className="select"
@@ -1112,6 +1224,11 @@ const OrderDetail = () => {
           <button className="btn" disabled={!canUpdate} onClick={updateStatus}>{saving ? "Saving..." : "Update"}</button>
           <button className="btn" onClick={() => openPrintSlip("a4")}>Print Slip</button>
           <button className="btn secondary" onClick={() => openPrintSlip("thermal")}>Thermal Slip</button>
+          {canDeleteOrder && (
+            <button className="btn danger" onClick={deleteOrder} disabled={deleteSaving}>
+              Delete Order
+            </button>
+          )}
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/orders")}>← Back</button>
       </div>
       </div>
@@ -1121,6 +1238,7 @@ const OrderDetail = () => {
           <div className="card-header"><h2>Customer</h2></div>
           <div className="info-grid">
             <div><label>Name</label><p>{order?.name || ""}</p></div>
+            {order?.clinicName ? <div><label>Clinic Name</label><p>{order.clinicName}</p></div> : null}
             <div><label>Email</label><p>{order?.email || ""}</p></div>
             <div><label>Contact</label><p>{order?.contact || ""}</p></div>
             <div><label>Payment</label><p>{order?.paymentMethod || ""}</p></div>
@@ -1133,7 +1251,7 @@ const OrderDetail = () => {
             <div><label>City</label><p>{order?.city || ""}</p></div>
             <div><label>Country</label><p>{order?.country || ""}</p></div>
             <div><label>Zip Code</label><p>{order?.zipCode || ""}</p></div>
-            <div><label>Shipping</label><p>{order?.shippingOption || ""}</p></div>
+            <div><label>Shipping</label><p>{order?.shippingOption === "city_calculated" ? "Calculated by city" : (order?.shippingOption || "")}</p></div>
             <div><label>Courier</label><p>{order?.courierCompany || order?.courierName || "—"}</p></div>
             <div><label>Tracking ID</label><p>{orderTrackingLabel}</p></div>
             <div><label>Delivery Person</label><p>{order?.deliveryPersonName || "—"}</p></div>
@@ -1146,7 +1264,10 @@ const OrderDetail = () => {
           <div className="card-header"><h2>Amounts</h2></div>
           <div className="amounts">
             <div className="amount-item"><span className="label">Subtotal</span><span className="value">{order?.subTotal ?? 0}</span></div>
-            <div className="amount-item"><span className="label">Shipping</span><span className="value">{order?.shippingCost ?? 0}</span></div>
+            <div className="amount-item"><span className="label">Shipping</span><span className="value">{order?.shippingOption === "city_calculated" ? "Calculated by city" : (order?.shippingCost ?? 0)}</span></div>
+            {Number(order?.paymentFee || 0) > 0 ? (
+              <div className="amount-item"><span className="label">COD Fee</span><span className="value">{order.paymentFee}</span></div>
+            ) : null}
             <div className="amount-item"><span className="label">Discount</span><span className="value">{order?.discount ?? 0}</span></div>
             {order?.coupon?.couponCode || order?.couponCode ? (
               <div className="amount-item"><span className="label">Coupon</span><span className="value">{order?.coupon?.couponCode || order?.couponCode}</span></div>
@@ -1169,6 +1290,42 @@ const OrderDetail = () => {
             )}
           </ul>
         </div>
+      </div>
+
+      <div className="card order-audit-card" style={{ marginTop: 16 }}>
+        <div className="card-header"><h2>Order Change Trail</h2></div>
+        {orderAuditLogs.length > 0 ? (
+          <div className="order-audit-log">
+            {orderAuditLogs.map((entry, index) => (
+              <div className="order-audit-item" key={`order-audit-${index}-${entry?.changedAt || ""}`}>
+                <div className="top">
+                  <strong>{auditActionLabel(entry?.action)}</strong>
+                  <span>{fmtDateTime(entry?.changedAt)}</span>
+                </div>
+                <div className="meta">
+                  <span>By: {entry?.changedBy?.name || entry?.changedBy?.email || "Unknown"}</span>
+                  {entry?.changedBy?.email ? <span>Account: {entry.changedBy.email}</span> : null}
+                  {entry?.changedBy?.role ? <span>Role: {entry.changedBy.role}</span> : null}
+                </div>
+                {entry?.summary ? <p>{entry.summary}</p> : null}
+                {Array.isArray(entry?.fieldsChanged) && entry.fieldsChanged.length > 0 ? (
+                  <div className="order-audit-fields">
+                    {entry.fieldsChanged.map((change, changeIndex) => (
+                      <div className="order-audit-field" key={`${change?.field || "field"}-${changeIndex}`}>
+                        <span className="field-name">{change?.field || "field"}</span>
+                        <span className="field-value">{formatAuditValue(change?.previousValue)}</span>
+                        <span className="field-arrow">→</span>
+                        <span className="field-value">{formatAuditValue(change?.nextValue)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No order changes have been recorded yet.</p>
+        )}
       </div>
 
       {canViewPaymentVerification && (
@@ -1196,7 +1353,9 @@ const OrderDetail = () => {
                         <span>{fmtDateTime(entry?.changedAt)}</span>
                       </div>
                       <div className="meta">
-                        <span>By: {entry?.changedBy?.name || "Unknown"}</span>
+                        <span>By: {entry?.changedBy?.name || entry?.changedBy?.email || "Unknown"}</span>
+                        {entry?.changedBy?.email ? <span>Account: {entry.changedBy.email}</span> : null}
+                        {entry?.changedBy?.role ? <span>Role: {entry.changedBy.role}</span> : null}
                         <span>Method: {entry?.receivedMethod || "—"}</span>
                         <span>Amount: {entry?.amountReceived ?? 0}</span>
                         <span>Proofs: {entry?.proofImageCount ?? 0}</span>

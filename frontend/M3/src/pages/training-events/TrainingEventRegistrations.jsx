@@ -52,7 +52,7 @@ const exportColumnOptions = [
   { key: "approved_by", label: "Approved By" },
   { key: "notes_comments", label: "Notes/Comments" },
 ];
-
+const EXPORT_TIMEOUT_MS = 120000;
 const PMDC_SEARCH_ENDPOINT = "https://hospitals-inspections.pmdc.pk/api/DRC/GetData";
 const PMDC_QUALIFICATIONS_ENDPOINT =
   "https://hospitals-inspections.pmdc.pk/api/DRC/GetQualifications";
@@ -237,6 +237,25 @@ const toDateLabel = (value) => {
   } catch {
     return String(value);
   }
+};
+
+const getFilenameFromContentDisposition = (headerValue, fallback) => {
+  const value = String(headerValue || "");
+  const encodedMatch = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (encodedMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedMatch[1]).replace(/[\\/:*?"<>|]+/g, "-");
+    } catch {
+      return encodedMatch[1].replace(/[\\/:*?"<>|]+/g, "-");
+    }
+  }
+  const plainMatch = value.match(/filename="?([^";]+)"?/i);
+  return plainMatch?.[1] ? plainMatch[1].replace(/[\\/:*?"<>|]+/g, "-") : fallback;
+};
+
+const isErrorLikeExportResponse = (resp) => {
+  const contentType = String(resp.headers.get("content-type") || "").toLowerCase();
+  return contentType.includes("application/json") || contentType.includes("text/html");
 };
 
 const normalizePmdcStatusValue = (value) => {
@@ -1037,25 +1056,33 @@ const TrainingEventRegistrations = () => {
     });
   };
 
-  const executeExport = async () => {
-    if (!exportColumns.length) {
+  const executeExport = async (overrides = {}) => {
+    const nextFormat = overrides.format || exportFormat;
+    const nextScope = overrides.scope || exportScope;
+    const nextColumns = Array.isArray(overrides.columns) && overrides.columns.length
+      ? overrides.columns
+      : exportColumns;
+
+    if (!nextColumns.length) {
       alert("Select at least one column for export.");
       return;
     }
-    if (exportScope === "selected" && selectedIds.length === 0) {
+    if (nextScope === "selected" && selectedIds.length === 0) {
       alert("Select at least one registration row first.");
       return;
     }
     setExportLoading(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), EXPORT_TIMEOUT_MS);
     try {
       const url = new URL(
-        `${API_BASE_URL}/training-events/admin/registrations/export/${exportFormat}`
+        `${API_BASE_URL}/training-events/admin/registrations/export/${nextFormat}`
       );
-      if (exportScope !== "selected") {
+      if (nextScope !== "selected") {
         if (isEventScoped && id) {
           url.searchParams.set("eventId", id);
         }
-        if (exportScope === "filtered") {
+        if (nextScope === "filtered") {
           if (!isEventScoped && eventFilter) {
             url.searchParams.set("eventId", eventFilter);
           }
@@ -1079,33 +1106,57 @@ const TrainingEventRegistrations = () => {
           }
         }
       }
-      if (exportScope === "selected") {
+      if (nextScope === "selected") {
         url.searchParams.set("ids", selectedIds.join(","));
       }
-      url.searchParams.set("columns", exportColumns.join(","));
+      url.searchParams.set("columns", nextColumns.join(","));
 
       const resp = await fetch(url.toString(), {
         headers: { ...getAuthHeaders() },
+        cache: "no-store",
+        signal: controller.signal,
       });
       if (!resp.ok) {
         const payload = await resp.json().catch(() => ({}));
         const parsed = parseApiError(payload, "Failed to export registrations");
         throw new Error(parsed.issues.join(" ") || parsed.summary);
       }
+      if (isErrorLikeExportResponse(resp)) {
+        const payload = await resp.json().catch(() => ({}));
+        const parsed = parseApiError(
+          payload,
+          "The server returned an export error. Please refresh and try again."
+        );
+        throw new Error(parsed.issues.join(" ") || parsed.summary);
+      }
       const blob = await resp.blob();
+      if (!blob.size) {
+        throw new Error("The export file was empty. Please adjust filters and try again.");
+      }
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
+      const fallbackFilename = `training-event-registrations.${nextFormat}`;
       link.href = objectUrl;
-      link.download = `training-event-registrations.${exportFormat}`;
+      link.download = getFilenameFromContentDisposition(
+        resp.headers.get("content-disposition"),
+        fallbackFilename
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(objectUrl);
-      setShowExportModal(false);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+      if (showExportModal) setShowExportModal(false);
       alert("Export completed successfully.");
     } catch (err) {
-      alert(err?.message || "Failed to export registrations");
+      if (err?.name === "AbortError") {
+        alert(
+          "Export took too long and was cancelled safely. Try CSV, fewer columns, or a narrower date/event filter."
+        );
+      } else {
+        alert(err?.message || "Failed to export registrations");
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       setExportLoading(false);
     }
   };
@@ -1144,8 +1195,13 @@ const TrainingEventRegistrations = () => {
               ? `Verifying ${bulkVerifyProgress}`
               : `Verify Selected PMDC (${selectedVerifiableRows.length})`}
           </button>
-          <button className="btn" type="button" onClick={() => setShowExportModal(true)}>
-            Export Registrations
+          <button
+            className="btn"
+            type="button"
+            onClick={() => executeExport({ format: "xlsx", scope: "filtered" })}
+            disabled={exportLoading}
+          >
+            {exportLoading ? "Exporting..." : "Export Registrations"}
           </button>
         </div>
       </div>
@@ -1297,8 +1353,13 @@ const TrainingEventRegistrations = () => {
           >
             Reset Filters
           </button>
-          <button className="btn secondary" type="button" onClick={() => setShowExportModal(true)}>
-            Export
+          <button
+            className="btn secondary"
+            type="button"
+            onClick={() => executeExport({ format: "xlsx", scope: "filtered" })}
+            disabled={exportLoading}
+          >
+            {exportLoading ? "Exporting..." : "Export"}
           </button>
           <button
             className="btn"
@@ -1624,7 +1685,7 @@ const TrainingEventRegistrations = () => {
                 Active filters will be included: status, PMDC status, event, event city, date
                 range, and search.
               </span>
-              <button className="btn" type="button" onClick={executeExport} disabled={exportLoading}>
+              <button className="btn" type="button" onClick={() => executeExport()} disabled={exportLoading}>
                 {exportLoading ? "Processing..." : "Download Export"}
               </button>
             </div>

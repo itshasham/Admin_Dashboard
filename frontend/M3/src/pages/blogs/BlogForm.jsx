@@ -24,8 +24,8 @@ const emptyBlog = {
     noIndex: false,
   },
   workflow: {
-    status: "draft",
-    approvalRequired: true,
+    status: "published",
+    approvalRequired: false,
     reviewer: "",
     scheduledFor: "",
     publishedAt: "",
@@ -232,6 +232,9 @@ const BlogForm = () => {
       workflow: {
         ...prev.workflow,
         [name]: type === "checkbox" ? checked : value,
+        ...(name === "status" && value === "published" && !prev.workflow.publishedAt
+          ? { publishedAt: toDateInput(new Date().toISOString()) }
+          : {}),
       },
     }));
   };
@@ -378,7 +381,10 @@ const BlogForm = () => {
         approvalRequired: Boolean(blog.workflow.approvalRequired),
         reviewer: blog.workflow.reviewer || "",
         scheduledFor: fromDateInput(blog.workflow.scheduledFor),
-        publishedAt: fromDateInput(blog.workflow.publishedAt),
+        publishedAt:
+          blog.workflow.status === "published" && !blog.workflow.publishedAt
+            ? new Date().toISOString()
+            : fromDateInput(blog.workflow.publishedAt),
       },
       automation: {
         targetKeyword: blog.automation.targetKeyword || "",

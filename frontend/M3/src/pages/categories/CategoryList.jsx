@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./category.css";
 import { API_BASE_URL } from '../../config/api';
 
 const CategoryList = () => {
+  const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -26,12 +28,12 @@ const CategoryList = () => {
     return [];
   };
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const resp = await fetch(`${API_BASE_URL}/category/all`, { headers: { ...getAuthHeaders() }, cache: "no-store" });
-      if (resp.status === 304) { setLoading(false); return; }
+      if (resp.status === 304) return;
       const isJson = resp.headers.get("content-type")?.includes("application/json");
       const data = isJson ? await resp.json().catch(() => null) : null;
       if (!resp.ok) throw new Error(data?.message || "Failed to load categories");
@@ -42,7 +44,7 @@ const CategoryList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this category?")) return;
@@ -61,7 +63,7 @@ const CategoryList = () => {
 
   useEffect(() => {
     fetchCategories();
-  }, []);
+  }, [fetchCategories]);
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div className="error">{error}</div>;
@@ -74,11 +76,12 @@ const CategoryList = () => {
           <p className="muted">Create, view and manage product categories</p>
         </div>
         <div className="actions">
-          <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>← Back</button>
-          <button className="btn" onClick={() => (window.location.href = "/admin/categories/new")}>+ New Category</button>
+          <button className="btn secondary" type="button" onClick={() => navigate("/admin/dashboard")}>← Back</button>
+          <button className="btn" type="button" onClick={() => navigate("/admin/categories/new")}>+ New Category</button>
         </div>
       </div>
-      <table className="table animated-table">
+      <div className="table-responsive">
+        <table className="table animated-table">
         <thead>
           <tr>
             <th>Image</th>
@@ -105,14 +108,15 @@ const CategoryList = () => {
               </td>
               <td>
                 <div className="actions">
-                  <button className="btn" onClick={() => (window.location.href = `/admin/categories/${c._id}`)}>Edit</button>
-                  <button className="btn danger" onClick={() => handleDelete(c._id)}>Delete</button>
+                  <button className="btn" type="button" onClick={() => navigate(`/admin/categories/${c._id}`)}>Edit</button>
+                  <button className="btn danger" type="button" onClick={() => handleDelete(c._id)}>Delete</button>
                 </div>
               </td>
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 };

@@ -14,6 +14,7 @@ const OrderList = () => {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [role, setRole] = useState("");
+  const [deleteSaving, setDeleteSaving] = useState(false);
 
   const getAuthHeaders = () => {
     try {
@@ -167,6 +168,7 @@ const OrderList = () => {
   }, []);
 
   const canViewPaymentVerification = role === "CEO" || role === "Manager";
+  const canDeleteOrder = role === "CEO";
 
   const normalizeStatus = (status) => {
     const value = String(status || "").toLowerCase();
@@ -270,6 +272,33 @@ const OrderList = () => {
   const isPaymentVerified = (order) => {
     const status = String(order?.paymentVerification?.status || "").toLowerCase();
     return order?.paymentVerification?.isVerified === true || status === "verified";
+  };
+
+  const deleteOrder = async (order) => {
+    const orderId = order?._id;
+    if (!orderId || role !== "CEO") return;
+
+    setDeleteSaving(true);
+    try {
+      const resp = await fetch(`${API_BASE_URL}/order/admin/orders/${orderId}`, {
+        method: "DELETE",
+        headers: { ...getAuthHeaders() },
+      });
+      const isJson = resp.headers.get("content-type")?.includes("application/json");
+      const data = isJson ? await resp.json().catch(() => ({})) : {};
+
+      if (!resp.ok) {
+        throw new Error(data?.message || data?.error || "Failed to delete order");
+      }
+
+      setOrders((prev) => prev.filter((order) => String(order?._id || "") !== String(orderId)));
+    } catch (err) {
+      if (err.message !== "Deletion cancelled.") {
+        setError(err.message || "Failed to delete order");
+      }
+    } finally {
+      setDeleteSaving(false);
+    }
   };
 
   return (
@@ -435,13 +464,25 @@ const OrderList = () => {
                     </td>
                     <td>
                       {order?._id ? (
-                        <button
-                          className="btn order-view-btn"
-                          type="button"
-                          onClick={() => navigate(`/admin/orders/${order._id}`)}
-                        >
-                          View
-                        </button>
+                        <div className="order-row-actions">
+                          <button
+                            className="btn order-view-btn"
+                            type="button"
+                            onClick={() => navigate(`/admin/orders/${order._id}`)}
+                          >
+                            View
+                          </button>
+                          {canDeleteOrder && (
+                            <button
+                              className="btn danger order-delete-row-btn"
+                              type="button"
+                              onClick={() => deleteOrder(order)}
+                              disabled={deleteSaving}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <span className="subtext">No ID</span>
                       )}

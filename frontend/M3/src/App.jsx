@@ -1,5 +1,6 @@
-import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
+import { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { BookOpenText, LayoutDashboard, LockKeyhole, LogOut, MessageCircle, Package, ReceiptText, ShoppingBag, Stethoscope, UsersRound, Warehouse } from "lucide-react";
 
 // Lazy-loaded pages to reduce initial bundle
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
@@ -35,28 +36,58 @@ const OrderList = lazy(() => import("./pages/orders/OrderList"));
 const OrderDetail = lazy(() => import("./pages/orders/OrderDetail"));
 
 const UserList = lazy(() => import("./pages/users/UserList"));
+const WhatsAppCampaign = lazy(() => import("./pages/whatsapp/WhatsAppCampaign"));
 
 const CouponList = lazy(() => import("./pages/coupons/CouponList"));
 const CouponForm = lazy(() => import("./pages/coupons/CouponForm"));
 
 const CloudinaryPage = lazy(() => import("./pages/cloudinary/CloudinaryPage"));
 const ContactUsList = lazy(() => import("./pages/contacts/ContactUsList"));
+const GoogleMapLinkList = lazy(() => import("./pages/google-map-links/GoogleMapLinkList"));
+const PeopleAssets = lazy(() => import("./pages/people-assets/PeopleAssets"));
+const GuestEmployeeEntry = lazy(() =>
+  import("./pages/people-assets/GuestEmployeeEntry")
+);
+const DeletePinSettings = lazy(() => import("./pages/security/DeletePinSettings"));
+const ExpenseManagement = lazy(() => import("./pages/expenses/ExpenseManagement"));
+const InventoryManagement = lazy(() => import("./pages/inventory/InventoryManagement"));
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import { DeletePinProvider } from "./components/DeletePinProvider";
 
 const RedirectToResetPassword = () => {
   const { token } = useParams();
   return <Navigate to={`/admin/reset-password/${token}`} replace />;
 };
 
+const readStoredAdmin = () => {
+  try {
+    const raw = localStorage.getItem("adminData");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const PeopleWorkspace = () =>
+  readStoredAdmin()?.role === "Guest" ? <GuestEmployeeEntry /> : <PeopleAssets />;
+
 const RootRedirect = () => {
   let hasToken = false;
+  let role = "";
   try {
     hasToken = Boolean(localStorage.getItem("adminToken"));
+    role = String(readStoredAdmin()?.role || "");
   } catch {
     hasToken = false;
+    role = "";
   }
-  return <Navigate to={hasToken ? "/admin/dashboard" : "/admin/login"} replace />;
+  const destination = !hasToken
+    ? "/admin/login"
+    : role === "Guest"
+      ? "/admin/people-assets"
+      : "/admin/dashboard";
+  return <Navigate to={destination} replace />;
 };
 
 const AdminTitleManager = () => {
@@ -71,12 +102,121 @@ const AdminTitleManager = () => {
   return null;
 };
 
+const AdminGlobalNavigation = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const path = location.pathname;
+  const isAuthRoute = [
+    "/admin/login",
+    "/admin/register",
+    "/admin/forgot-password",
+    "/admin/reset-password",
+  ].some((route) => path === route || path.startsWith(`${route}/`));
+
+  if (!path.startsWith("/admin") || isAuthRoute || path === "/admin/dashboard") return null;
+
+  let adminName = "Administrator";
+  let adminRole = "Admin";
+  try {
+    const raw = localStorage.getItem("adminData");
+    const data = raw ? JSON.parse(raw) : null;
+    adminName = data?.name || adminName;
+    adminRole = data?.role || adminRole;
+  } catch {
+    // Keep a safe fallback when browser storage is unavailable.
+  }
+
+  const standardLinks = [
+    { label: "Overview", path: "/admin/dashboard", icon: LayoutDashboard },
+    { label: "Orders", path: "/admin/orders", icon: ShoppingBag },
+    { label: "Expenses", path: "/admin/expenses", icon: ReceiptText },
+    ...(adminRole === "CEO"
+      ? [{ label: "Stock", path: "/admin/inventory", icon: Warehouse }]
+      : []),
+    { label: "Retail", path: "/admin/products", icon: Package },
+    { label: "Clinical", path: "/admin/clinical-products", icon: Stethoscope },
+    { label: "People", path: "/admin/people-assets", icon: UsersRound },
+    { label: "Content", path: "/admin/blogs", icon: BookOpenText },
+    { label: "WhatsApp", path: "/admin/whatsapp", icon: MessageCircle },
+    ...(adminRole === "CEO"
+      ? [{ label: "Delete PIN", path: "/admin/security/delete-pin", icon: LockKeyhole }]
+      : []),
+  ];
+  const links =
+    adminRole === "Guest"
+      ? [{ label: "Employee Entry", path: "/admin/people-assets", icon: UsersRound }]
+      : adminRole === "ReadOnly"
+      ? [{ label: "Expenses", path: "/admin/expenses", icon: ReceiptText }]
+      : standardLinks;
+  const brandTarget = adminRole === "Guest" ? "/admin/people-assets" : "/admin/dashboard";
+
+  const logout = () => {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminData");
+    navigate("/admin/login", { replace: true });
+  };
+
+  return (
+    <>
+      <header className="admin-page-nav">
+        <button type="button" className="admin-page-nav-brand" onClick={() => navigate(brandTarget)}>
+          <span className="admin-page-nav-mark">N</span>
+          <span>
+            <strong>NEES Medical</strong>
+            <small>{adminRole === "Guest" ? "Quick entry workspace" : "Admin workspace"}</small>
+          </span>
+        </button>
+        <nav className="admin-page-nav-links" aria-label="Admin shortcuts">
+          {links.map(({ label, path: target, icon: Icon }) => {
+            const active = path === target || (target !== "/admin/dashboard" && path.startsWith(`${target}/`));
+            return (
+              <button
+                key={target}
+                type="button"
+                className={active ? "active" : ""}
+                aria-current={active ? "page" : undefined}
+                onClick={() => navigate(target)}
+              >
+                <Icon size={16} aria-hidden="true" />
+                {label}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="admin-page-nav-account">
+          <span><strong>{adminName}</strong><small>{adminRole}</small></span>
+          <button type="button" onClick={logout} aria-label="Log out"><LogOut size={16} /></button>
+        </div>
+      </header>
+      <nav className="admin-page-mobile-dock" aria-label="Mobile admin shortcuts">
+        {links.slice(0, 5).map(({ label, path: target, icon: Icon }) => {
+          const active = path === target || (target !== "/admin/dashboard" && path.startsWith(`${target}/`));
+          return (
+            <button
+              key={target}
+              type="button"
+              className={active ? "active" : ""}
+              aria-current={active ? "page" : undefined}
+              onClick={() => navigate(target)}
+            >
+              <Icon size={18} aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </>
+  );
+};
+
 const App = () => {
   return (
     <BrowserRouter>
-      <AdminTitleManager />
-      <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
-        <Routes>
+      <DeletePinProvider>
+        <AdminTitleManager />
+        <AdminGlobalNavigation />
+        <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
+          <Routes>
           {/* Root: decide where to go based on auth */}
           <Route path="/" element={<RootRedirect />} />
           {/* Public auth routes */}
@@ -142,6 +282,26 @@ const App = () => {
 
           {/* User Management (protected) */}
           <Route path="/admin/users" element={<ProtectedRoute><UserList /></ProtectedRoute>} />
+          <Route
+            path="/admin/people-assets"
+            element={<ProtectedRoute allowedRoles={["Admin", "Manager", "CEO", "Guest"]}><PeopleWorkspace /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/expenses"
+            element={<ProtectedRoute allowedRoles={["Admin", "Manager", "CEO", "ReadOnly"]}><ExpenseManagement /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/security/delete-pin"
+            element={<ProtectedRoute allowedRoles={["CEO"]}><DeletePinSettings /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/inventory"
+            element={<ProtectedRoute allowedRoles={["CEO"]}><InventoryManagement /></ProtectedRoute>}
+          />
+          <Route
+            path="/admin/whatsapp"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><WhatsAppCampaign /></ProtectedRoute>}
+          />
 
           {/* Coupon Management (protected) */}
           <Route
@@ -163,14 +323,19 @@ const App = () => {
             path="/admin/contact-us"
             element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><ContactUsList /></ProtectedRoute>}
           />
+          <Route
+            path="/admin/google-map-links"
+            element={<ProtectedRoute allowedRoles={["Manager", "CEO"]}><GoogleMapLinkList /></ProtectedRoute>}
+          />
           
           {/* Redirect route for email links */}
           <Route path="/forget-password/:token" element={<RedirectToResetPassword />} />
 
           {/* Optional: catch-all to root */}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+          </Routes>
+        </Suspense>
+      </DeletePinProvider>
     </BrowserRouter>
   );
 }
