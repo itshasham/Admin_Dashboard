@@ -4,6 +4,11 @@ import "./order.css";
 import { API_BASE_URL } from "../../config/api";
 
 const STATUS_OPTIONS = ["all", "pending", "processing", "dispatch", "cancel"];
+const getCity = (order) => String(order?.city || "").trim().replace(/\s+/g, " ");
+const isPaymentVerified = (order) => {
+  const status = String(order?.paymentVerification?.status || "").toLowerCase();
+  return order?.paymentVerification?.isVerified === true || status === "verified";
+};
 
 const OrderList = () => {
   const navigate = useNavigate();
@@ -13,6 +18,8 @@ const OrderList = () => {
   const [errorDebug, setErrorDebug] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [cityFilter, setCityFilter] = useState("all");
+  const [verificationFilter, setVerificationFilter] = useState("all");
   const [role, setRole] = useState("");
   const [deleteSaving, setDeleteSaving] = useState(false);
 
@@ -200,12 +207,33 @@ const OrderList = () => {
     return Number.isFinite(ts) ? ts : 0;
   };
 
+  const cityOptions = useMemo(() => {
+    const cities = new Map();
+    orders.forEach((order) => {
+      const city = getCity(order);
+      if (city) cities.set(city.toLowerCase(), city);
+    });
+    return [...cities.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [orders]);
+
+  const hasActiveFilters = query || statusFilter !== "all" || cityFilter !== "all" || verificationFilter !== "all";
+  const resetFilters = () => {
+    setQuery("");
+    setStatusFilter("all");
+    setCityFilter("all");
+    setVerificationFilter("all");
+  };
+
   const filteredOrders = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return orders
       .filter((order) => {
         const currentStatus = normalizeStatus(order?.status);
         if (statusFilter !== "all" && currentStatus !== statusFilter) return false;
+        const city = getCity(order).toLowerCase();
+        if (cityFilter === "missing" ? city !== "" : cityFilter !== "all" && `city:${city}` !== cityFilter) return false;
+        if (canViewPaymentVerification && verificationFilter !== "all" &&
+            isPaymentVerified(order) !== (verificationFilter === "verified")) return false;
         if (!needle) return true;
 
         const haystack = [
@@ -215,6 +243,7 @@ const OrderList = () => {
           order?.user?.email,
           order?.user,
           order?.email,
+          getCity(order),
           order?.paymentMethod,
           order?.status
         ]
@@ -225,7 +254,7 @@ const OrderList = () => {
         return haystack.includes(needle);
       })
       .sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a));
-  }, [orders, query, statusFilter]);
+  }, [orders, query, statusFilter, cityFilter, verificationFilter, canViewPaymentVerification]);
 
   const stats = useMemo(() => {
     const counts = { pending: 0, processing: 0, dispatch: 0, cancel: 0 };
@@ -267,11 +296,6 @@ const OrderList = () => {
     } catch {
       return "-";
     }
-  };
-
-  const isPaymentVerified = (order) => {
-    const status = String(order?.paymentVerification?.status || "").toLowerCase();
-    return order?.paymentVerification?.isVerified === true || status === "verified";
   };
 
   const deleteOrder = async (order) => {
@@ -346,7 +370,8 @@ const OrderList = () => {
         <div className="search-input orders-search-input">
           <input
             type="search"
-            placeholder="Search by invoice, customer, email, or status"
+            aria-label="Search orders"
+            placeholder="Search invoice, customer, email, city, or status"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -363,7 +388,28 @@ const OrderList = () => {
         </div>
 
         <div className="orders-filter-wrap">
-          <span className="orders-visible-note">
+          <div className="orders-select-filters">
+            <label>
+              City
+              <select className="select" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
+                <option value="all">All cities</option>
+                <option value="missing">City not provided</option>
+                {cityOptions.map(([key, label]) => <option key={key} value={`city:${key}`}>{label}</option>)}
+              </select>
+            </label>
+            {canViewPaymentVerification && (
+              <label>
+                Payment verification
+                <select className="select" value={verificationFilter} onChange={(e) => setVerificationFilter(e.target.value)}>
+                  <option value="all">All verification statuses</option>
+                  <option value="verified">Verified</option>
+                  <option value="unverified">Unverified</option>
+                </select>
+              </label>
+            )}
+            {hasActiveFilters && <button type="button" className="btn secondary" onClick={resetFilters}>Reset filters</button>}
+          </div>
+          <span className="orders-visible-note" role="status">
             Showing {filteredOrders.length} of {orders.length}
           </span>
           <div className="pill-row">
@@ -373,6 +419,7 @@ const OrderList = () => {
                 key={status}
                 className={`filter-pill ${statusFilter === status ? "active" : ""}`}
                 onClick={() => setStatusFilter(status)}
+                aria-pressed={statusFilter === status}
               >
                 {status}
                 <span className="pill-count">{visibleCounts[status]}</span>
@@ -393,14 +440,11 @@ const OrderList = () => {
         {!loading && !error && filteredOrders.length === 0 && (
           <div className="empty-state orders-empty-state">
             <p>No orders match your filters.</p>
-            {(query || statusFilter !== "all") && (
+            {hasActiveFilters && (
               <button
                 className="btn secondary"
                 type="button"
-                onClick={() => {
-                  setQuery("");
-                  setStatusFilter("all");
-                }}
+                onClick={resetFilters}
               >
                 Reset Filters
               </button>
@@ -439,6 +483,7 @@ const OrderList = () => {
                       <div className="order-customer-cell">
                         <strong>{order?.name || order?.user?.name || order?.user || "Unknown"}</strong>
                         <span>{order?.email || order?.user?.email || "No email"}</span>
+                        <span>City: {getCity(order) || "Not provided"}</span>
                       </div>
                     </td>
                     <td>

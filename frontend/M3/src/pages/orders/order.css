@@ -150,6 +150,26 @@
   justify-items: end;
 }
 
+.orders-select-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.orders-select-filters label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.orders-select-filters .select {
+  max-width: 100%;
+  min-width: 170px;
+}
+
 .orders-visible-note {
   color: var(--muted);
   font-size: 12px;
