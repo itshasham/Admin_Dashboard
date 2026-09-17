@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
-import { BookOpenText, LayoutDashboard, LockKeyhole, LogOut, MessageCircle, Package, ReceiptText, ShoppingBag, Star, Stethoscope, UsersRound, Warehouse } from "lucide-react";
+import { BookOpenText, LayoutDashboard, LockKeyhole, LogOut, MessageCircle, Package, ReceiptText, ShoppingBag, Stethoscope, UsersRound, Warehouse } from "lucide-react";
 
 // Lazy-loaded pages to reduce initial bundle
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
@@ -34,7 +34,6 @@ const TrainingEventRegistrations = lazy(() =>
 
 const OrderList = lazy(() => import("./pages/orders/OrderList"));
 const OrderDetail = lazy(() => import("./pages/orders/OrderDetail"));
-const ReviewList = lazy(() => import("./pages/reviews/ReviewList"));
 
 const UserList = lazy(() => import("./pages/users/UserList"));
 const WhatsAppCampaign = lazy(() => import("./pages/whatsapp/WhatsAppCampaign"));
@@ -130,7 +129,6 @@ const AdminGlobalNavigation = () => {
   const standardLinks = [
     { label: "Overview", path: "/admin/dashboard", icon: LayoutDashboard },
     { label: "Orders", path: "/admin/orders", icon: ShoppingBag },
-    { label: "Reviews", path: "/admin/reviews", icon: Star },
     { label: "Expenses", path: "/admin/expenses", icon: ReceiptText },
     ...(adminRole === "CEO"
       ? [{ label: "Stock", path: "/admin/inventory", icon: Warehouse }]
@@ -281,7 +279,6 @@ const App = () => {
           {/* Order Management (protected) */}
           <Route path="/admin/orders" element={<ProtectedRoute><OrderList /></ProtectedRoute>} />
           <Route path="/admin/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />
-          <Route path="/admin/reviews" element={<ProtectedRoute allowedRoles={["Admin", "Manager", "CEO"]}><ReviewList /></ProtectedRoute>} />
 
           {/* User Management (protected) */}
           <Route path="/admin/users" element={<ProtectedRoute><UserList /></ProtectedRoute>} />
