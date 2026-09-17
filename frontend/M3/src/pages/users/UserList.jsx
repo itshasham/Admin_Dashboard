@@ -4,8 +4,11 @@ import { API_BASE_URL } from '../../config/api';
 import { ArrowLeft, Download, Info, RefreshCw, Users } from "lucide-react";
 import { buildCustomerRows, pickArray } from "./customer-data";
 
-const profileEndpoints = [
+const customerProfileEndpoints = [
   "/admin/customers?page=1&limit=200",
+];
+
+const registeredAccountEndpoints = [
   "/admin/users?page=1&limit=200",
 ];
 
@@ -55,19 +58,44 @@ const UserList = () => {
     return data;
   };
 
-  const fetchFirstRows = async (endpoints, { useAuth = true } = {}) => {
-    let succeeded = false;
-    for (const endpoint of endpoints) {
-      try {
-        const data = await tryFetch(endpoint, useAuth);
-        succeeded = true;
-        const rows = pickArray(data);
-        if (rows.length) return { rows, endpoint, succeeded: true };
-      } catch (_error) {
-        // Keep trying compatible deployments before falling back to local aggregation.
+  const fetchEndpointRows = async (endpoint, { useAuth = true } = {}) => {
+    const rows = [];
+    let page = 1;
+    let total = null;
+    let hasMore = true;
+
+    while (hasMore) {
+      const [path, queryString = ""] = endpoint.split("?");
+      const params = new URLSearchParams(queryString);
+      params.set("page", String(page));
+      params.set("limit", "200");
+      const data = await tryFetch(`${path}?${params.toString()}`, useAuth);
+      const pageRows = pickArray(data);
+      rows.push(...pageRows);
+
+      const reportedTotal = Number(data?.total);
+      if (Number.isFinite(reportedTotal) && reportedTotal >= 0) total = reportedTotal;
+
+      if (!pageRows.length || (total !== null ? rows.length >= total : pageRows.length < 200)) {
+        hasMore = false;
+      } else {
+        page += 1;
       }
     }
-    return { rows: [], endpoint: "", succeeded };
+
+    return rows;
+  };
+
+  const fetchCompatibleRows = async (endpoints, { useAuth = true } = {}) => {
+    for (const endpoint of endpoints) {
+      try {
+        const rows = await fetchEndpointRows(endpoint, { useAuth });
+        return { rows, endpoint, succeeded: true };
+      } catch (_error) {
+        // Keep trying compatible deployments before using the local fallback.
+      }
+    }
+    return { rows: [], endpoint: "", succeeded: false };
   };
 
   const fetchUsers = async () => {
@@ -75,15 +103,30 @@ const UserList = () => {
     setError("");
     setNotice("");
     try {
-      const profiles = await fetchFirstRows(profileEndpoints);
-      if (profiles.rows.length) {
-        setUsers(buildCustomerRows([{ source: "profiles", rows: profiles.rows }]));
+      const [profiles, accounts] = await Promise.all([
+        fetchCompatibleRows(customerProfileEndpoints),
+        fetchCompatibleRows(registeredAccountEndpoints),
+      ]);
+      const customerSources = [
+        profiles.rows.length ? { source: "profiles", rows: profiles.rows } : null,
+        accounts.rows.length ? { source: "accounts", rows: accounts.rows } : null,
+      ].filter(Boolean);
+
+      if (customerSources.length) {
+        setUsers(buildCustomerRows(customerSources));
+        if (!profiles.succeeded || !accounts.succeeded) {
+          setNotice(
+            profiles.succeeded
+              ? "Registered accounts could not be loaded, so this view currently shows checkout customer profiles only."
+              : "Checkout customer profiles could not be loaded, so this view currently shows registered customer accounts only."
+          );
+        }
         return;
       }
 
       const [orders, contacts] = await Promise.all([
-        fetchFirstRows(orderEndpoints),
-        fetchFirstRows(contactEndpoints),
+        fetchCompatibleRows(orderEndpoints),
+        fetchCompatibleRows(contactEndpoints),
       ]);
       const fallbackSources = [
         orders.rows.length ? { source: "orders", rows: orders.rows } : null,
@@ -94,11 +137,11 @@ const UserList = () => {
       setUsers(fallbackRows);
       setNotice(
         fallbackRows.length
-          ? "Customer profiles are unavailable. Showing unique customers assembled from orders and contact submissions; repeated email addresses are merged into one row."
-          : "Customer profiles are unavailable. No order or contact records were found to display."
+          ? "Customer profiles and registered accounts are unavailable. Showing unique people assembled from orders and contact submissions; repeated email addresses are merged into one row."
+          : "No customer profiles, registered accounts, order records, or contact records were found to display."
       );
 
-      if (!profiles.succeeded && !orders.succeeded && !contacts.succeeded) {
+      if (!profiles.succeeded && !accounts.succeeded && !orders.succeeded && !contacts.succeeded) {
         throw new Error("Customer data sources are unavailable right now.");
       }
     } catch (err) {
@@ -217,7 +260,7 @@ const UserList = () => {
         <div>
           <p className="customers-eyebrow">Audience workspace</p>
           <h2>Customers</h2>
-          <p className="customers-header-copy">One row per email address, with repeat records consolidated.</p>
+          <p className="customers-header-copy">One row per customer account or checkout profile, with matching email addresses consolidated.</p>
         </div>
         <div className="actions">
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>
