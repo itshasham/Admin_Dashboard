@@ -4,21 +4,10 @@ import { API_BASE_URL } from '../../config/api';
 import { ArrowLeft, Download, Info, RefreshCw, Users } from "lucide-react";
 import { buildCustomerRows, pickArray } from "./customer-data";
 
-const customerProfileEndpoints = [
-  "/admin/customers?page=1&limit=200",
-];
-
-const registeredAccountEndpoints = [
-  "/admin/users?page=1&limit=200",
-];
-
 const orderEndpoints = [
   "/order/admin/orders",
   "/order/orders",
-  "/user-order/dashboard-recent-order",
 ];
-
-const contactEndpoints = ["/contact-us?page=1&limit=200"];
 
 const UserList = () => {
   const [users, setUsers] = useState([]);
@@ -58,44 +47,19 @@ const UserList = () => {
     return data;
   };
 
-  const fetchEndpointRows = async (endpoint, { useAuth = true } = {}) => {
-    const rows = [];
-    let page = 1;
-    let total = null;
-    let hasMore = true;
-
-    while (hasMore) {
-      const [path, queryString = ""] = endpoint.split("?");
-      const params = new URLSearchParams(queryString);
-      params.set("page", String(page));
-      params.set("limit", "200");
-      const data = await tryFetch(`${path}?${params.toString()}`, useAuth);
-      const pageRows = pickArray(data);
-      rows.push(...pageRows);
-
-      const reportedTotal = Number(data?.total);
-      if (Number.isFinite(reportedTotal) && reportedTotal >= 0) total = reportedTotal;
-
-      if (!pageRows.length || (total !== null ? rows.length >= total : pageRows.length < 200)) {
-        hasMore = false;
-      } else {
-        page += 1;
-      }
-    }
-
-    return rows;
-  };
-
   const fetchCompatibleRows = async (endpoints, { useAuth = true } = {}) => {
+    let succeeded = false;
     for (const endpoint of endpoints) {
       try {
-        const rows = await fetchEndpointRows(endpoint, { useAuth });
-        return { rows, endpoint, succeeded: true };
+        const data = await tryFetch(endpoint, useAuth);
+        succeeded = true;
+        const rows = pickArray(data);
+        if (rows.length) return { rows, endpoint, succeeded: true };
       } catch (_error) {
-        // Keep trying compatible deployments before using the local fallback.
+        // Keep trying compatible deployments before reporting a load failure.
       }
     }
-    return { rows: [], endpoint: "", succeeded: false };
+    return { rows: [], endpoint: "", succeeded };
   };
 
   const fetchUsers = async () => {
@@ -103,46 +67,17 @@ const UserList = () => {
     setError("");
     setNotice("");
     try {
-      const [profiles, accounts] = await Promise.all([
-        fetchCompatibleRows(customerProfileEndpoints),
-        fetchCompatibleRows(registeredAccountEndpoints),
-      ]);
-      const customerSources = [
-        profiles.rows.length ? { source: "profiles", rows: profiles.rows } : null,
-        accounts.rows.length ? { source: "accounts", rows: accounts.rows } : null,
-      ].filter(Boolean);
-
-      if (customerSources.length) {
-        setUsers(buildCustomerRows(customerSources));
-        if (!profiles.succeeded || !accounts.succeeded) {
-          setNotice(
-            profiles.succeeded
-              ? "Registered accounts could not be loaded, so this view currently shows checkout customer profiles only."
-              : "Checkout customer profiles could not be loaded, so this view currently shows registered customer accounts only."
-          );
-        }
+      const orders = await fetchCompatibleRows(orderEndpoints);
+      if (orders.rows.length) {
+        setUsers(buildCustomerRows([{ source: "orders", rows: orders.rows }]));
         return;
       }
 
-      const [orders, contacts] = await Promise.all([
-        fetchCompatibleRows(orderEndpoints),
-        fetchCompatibleRows(contactEndpoints),
-      ]);
-      const fallbackSources = [
-        orders.rows.length ? { source: "orders", rows: orders.rows } : null,
-        contacts.rows.length ? { source: "contacts", rows: contacts.rows } : null,
-      ].filter(Boolean);
-      const fallbackRows = buildCustomerRows(fallbackSources);
-
-      setUsers(fallbackRows);
-      setNotice(
-        fallbackRows.length
-          ? "Customer profiles and registered accounts are unavailable. Showing unique people assembled from orders and contact submissions; repeated email addresses are merged into one row."
-          : "No customer profiles, registered accounts, order records, or contact records were found to display."
-      );
-
-      if (!profiles.succeeded && !accounts.succeeded && !orders.succeeded && !contacts.succeeded) {
-        throw new Error("Customer data sources are unavailable right now.");
+      setUsers([]);
+      if (orders.succeeded) {
+        setNotice("No order records were found. Customer rows are created only from orders in the database.");
+      } else {
+        throw new Error("Order data is unavailable right now.");
       }
     } catch (err) {
       setUsers([]);
@@ -175,9 +110,9 @@ const UserList = () => {
 
   const stats = useMemo(() => ({
     uniqueCustomers: users.length,
-    sourceRecords: users.reduce((total, user) => total + (user.recordCount || 0), 0),
     orders: users.reduce((total, user) => total + (user.totalOrders || 0), 0),
-    subscribed: users.filter((user) => user.isSubscribedToMarketing === true).length,
+    repeatCustomers: users.filter((user) => (user.totalOrders || 0) > 1).length,
+    totalSpent: users.reduce((total, user) => total + (user.totalSpent || 0), 0),
   }), [users]);
 
   const formatDate = (value) => {
@@ -204,8 +139,8 @@ const UserList = () => {
       "Country",
       "Total orders",
       "Total spent (PKR)",
+      "First order",
       "Last order",
-      "Marketing subscribed",
       "Records merged",
       "Source",
     ];
@@ -218,8 +153,8 @@ const UserList = () => {
       user.country || "",
       user.totalOrders || 0,
       user.totalSpent || 0,
+      formatDate(user.createdAt),
       formatDate(user.lastOrderDate),
-      user.isSubscribedToMarketing === true ? "Yes" : "No",
       user.recordCount || 1,
       user.source || "",
     ]);
@@ -260,7 +195,7 @@ const UserList = () => {
         <div>
           <p className="customers-eyebrow">Audience workspace</p>
           <h2>Customers</h2>
-          <p className="customers-header-copy">One row per customer account or checkout profile, with matching email addresses consolidated.</p>
+          <p className="customers-header-copy">One row per customer with an order in the database, with matching email addresses consolidated.</p>
         </div>
         <div className="actions">
           <button className="btn secondary" onClick={() => (window.location.href = "/admin/dashboard")}>
@@ -291,10 +226,10 @@ const UserList = () => {
       {!error && (
         <>
           <div className="customers-summary-grid">
-            <div className="summary-card"><span className="summary-label">Unique customers</span><strong className="summary-value">{stats.uniqueCustomers}</strong><span className="summary-chip"><Users size={12} aria-hidden="true" /> Email deduped</span></div>
-            <div className="summary-card"><span className="summary-label">Source records</span><strong className="summary-value">{stats.sourceRecords}</strong><span className="subtext">Raw records represented</span></div>
-            <div className="summary-card"><span className="summary-label">Orders linked</span><strong className="summary-value">{stats.orders}</strong><span className="subtext">Across all customers</span></div>
-            <div className="summary-card"><span className="summary-label">Marketing subscribed</span><strong className="summary-value">{stats.subscribed}</strong><span className="subtext">Known subscribers</span></div>
+            <div className="summary-card"><span className="summary-label">Unique customers</span><strong className="summary-value">{stats.uniqueCustomers}</strong><span className="summary-chip"><Users size={12} aria-hidden="true" /> Order email deduped</span></div>
+            <div className="summary-card"><span className="summary-label">Orders in database</span><strong className="summary-value">{stats.orders}</strong><span className="subtext">From order details</span></div>
+            <div className="summary-card"><span className="summary-label">Repeat customers</span><strong className="summary-value">{stats.repeatCustomers}</strong><span className="subtext">More than one order</span></div>
+            <div className="summary-card"><span className="summary-label">Total order value</span><strong className="summary-value">{formatMoney(stats.totalSpent)}</strong><span className="subtext">Across listed customers</span></div>
           </div>
           <div className="customers-toolbar">
             <label className="customers-search">
@@ -322,8 +257,8 @@ const UserList = () => {
                     <th>Total Orders</th>
                     <th>Total Spent</th>
                     <th>Last Order</th>
-                    <th>Subscribed</th>
-                    <th>Joined</th>
+                    <th>City</th>
+                    <th>First Order</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -340,7 +275,7 @@ const UserList = () => {
                       <td>{user.totalOrders || 0}</td>
                       <td>{formatMoney(user.totalSpent)}</td>
                       <td>{formatDate(user.lastOrderDate)}</td>
-                      <td>{typeof user.isSubscribedToMarketing === "boolean" ? (user.isSubscribedToMarketing ? "Yes" : "No") : "-"}</td>
+                      <td>{user.city || "-"}</td>
                       <td>{formatDate(user.createdAt)}</td>
                     </tr>
                   ))}
