@@ -33,7 +33,6 @@ const OrderDetail = () => {
   const [deleteSaving, setDeleteSaving] = useState(false);
   const paymentProofInputRef = useRef(null);
   const paymentProofImagesRef = useRef([]);
-  const courierCompanies = ["DHL", "TCS", "FedEx", "Blue Dart", "Leopards", "PostEx", "Local"];
   const normalizeStatus = (value) => {
     const statusValue = String(value || "").toLowerCase();
     if (statusValue === "cancelled" || statusValue === "canceled") return "cancel";
@@ -518,31 +517,18 @@ const OrderDetail = () => {
       const nextStatus = normalizeStatus(selectedStatus);
       const sendStatus = nextStatus === "dispatch" ? "dispatched" : nextStatus;
 
-      if (sendStatus === "dispatched") {
-        const courier = String(courierCompany || "").trim();
-        const localDelivery = isLocalDeliveryCourier(courier);
-        if (!courier) {
-          alert("courierCompany is required to mark an order as dispatched.");
-          return;
-        }
-        if (localDelivery && !String(deliveryPersonName || "").trim()) {
-          alert("deliveryPersonName is required for local dispatched orders.");
-          return;
-        }
-        if (!localDelivery && !String(trackingId || "").trim()) {
-          alert("trackingId is required to mark an order as dispatched.");
-          return;
-        }
-      }
-
-      const normalizedCourierCompany = String(courierCompany || "").trim();
+      // Dispatch is handled by PostEx. The backend creates the shipment and
+      // fills its tracking ID; the manager does not enter one manually.
+      const normalizedCourierCompany = sendStatus === "dispatched"
+        ? "PostEx"
+        : String(courierCompany || "").trim();
       const isLocalCourier = isLocalDeliveryCourier(normalizedCourierCompany);
       const body = {
         status: sendStatus,
         ...(sendStatus === "dispatched"
           ? {
               courierCompany: normalizedCourierCompany,
-              trackingId: isLocalCourier ? "" : String(trackingId).trim(),
+              trackingId: isLocalCourier || normalizedCourierCompany === "PostEx" ? "" : String(trackingId).trim(),
               deliveryPersonName: isLocalCourier ? String(deliveryPersonName).trim() : "",
             }
           : {}),
@@ -1116,7 +1102,6 @@ const OrderDetail = () => {
   const selectedStatus = statusOptions.includes(displayStatus) ? displayStatus : statusOptions[0];
   const canUpdate = !saving && selectedStatus !== currentStatus;
   const statusClass = displayStatus === "dispatch" ? "status-badge status-success" : displayStatus === "processing" ? "status-badge status-info" : displayStatus === "cancel" ? "status-badge status-danger" : "status-badge status-warn";
-  const localCourierSelected = isLocalDeliveryCourier(courierCompany);
   const orderCourierName = String(order?.courierCompany || order?.courierName || "").trim();
   const orderIsLocalDelivery = isLocalDeliveryCourier(orderCourierName);
   const orderTrackingLabel = orderIsLocalDelivery ? "N/A (Local Delivery)" : (order?.trackingId || order?.trackingNumber || "—");
@@ -1185,41 +1170,7 @@ const OrderDetail = () => {
             ))}
           </select>
           {normalizeStatus(selectedStatus) === "dispatch" && (currentStatus === "processing" || currentStatus === "cancel") && (
-            <>
-              <select
-                className="select"
-                value={courierCompany}
-                onChange={(e) => {
-                  const nextCourier = e.target.value;
-                  setCourierCompany(nextCourier);
-                  if (isLocalDeliveryCourier(nextCourier)) {
-                    setTrackingId("");
-                  } else {
-                    setDeliveryPersonName("");
-                  }
-                }}
-              >
-                <option value="">Courier Company</option>
-                {courierCompanies.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              {localCourierSelected ? (
-                <input
-                  className="select"
-                  placeholder="Delivery Person Name"
-                  value={deliveryPersonName}
-                  onChange={(e) => setDeliveryPersonName(e.target.value)}
-                />
-              ) : (
-                <input
-                  className="select"
-                  placeholder="Tracking ID"
-                  value={trackingId}
-                  onChange={(e) => setTrackingId(e.target.value)}
-                />
-              )}
-            </>
+            <span className="muted">PostEx will create the shipment and tracking number automatically.</span>
           )}
           <button className="btn" disabled={!canUpdate} onClick={updateStatus}>{saving ? "Saving..." : "Update"}</button>
           <button className="btn" onClick={() => openPrintSlip("a4")}>Print Slip</button>
